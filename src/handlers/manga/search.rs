@@ -1,0 +1,55 @@
+// ---------------------- Imports -------------------
+use actix_web::{
+    web::{self, Query},
+    HttpRequest, HttpResponse, Responder,
+};
+use meilisearch_sdk::{indexes::Index, search::SearchResults, task_info::TaskInfo};
+use serde::{Deserialize, Serialize};
+
+use crate::{search, AppData};
+
+// ---------------------- Structs -------------------
+
+search!(MangaSearch {
+    db_id: String,
+    original: String,
+    en: String,
+    jp: String,
+});
+
+#[derive(Deserialize)]
+struct SearchForm {
+    q: String,
+    l: usize,
+}
+
+// ---------------------- Handlers -------------------
+pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+    let param = Query::<SearchForm>::from_query(&params.query_string()).unwrap();
+    let search_index = state.meilisearch.index("manga");
+
+    let record: Option<SearchResults<ContentRecord>> = search_index
+        .search()
+        .with_query(&param.q)
+        .with_limit(param.l)
+        .execute::<ContentRecord>()
+        .await
+        .ok();
+
+    match &record {
+        Some(data) => {
+            let res: Vec<&ContentRecord> = data.hits.iter().map(|res| &res.result).collect();
+            HttpResponse::Ok().json(res)
+        }
+        None => HttpResponse::NotFound().into(),
+    }
+}
+
+pub async fn post(req: web::Json<MangaSearch>, state: web::Data<AppData>) -> impl Responder {
+    let search_index = state.meilisearch.index("manga");
+
+    let record: TaskInfo = req.create(search_index).await;
+    let res: String = format!("{:#?}", &record);
+
+    HttpResponse::Created().body(res)
+}

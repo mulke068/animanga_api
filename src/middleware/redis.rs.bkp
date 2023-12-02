@@ -1,0 +1,137 @@
+// ---------------------------- REDIS ------------------------------
+// async fn handler_get_user(_req: String ,state: web::Data<AppData>) -> impl Responder {
+//     let data: String = state.redis.get_connection().unwrap().get(_req).unwrap();
+//     HttpResponse::Ok().body(data)
+// }
+
+// async fn handler_post_user(_req: String, state: web::Data<AppData>) -> impl Responder {
+//     let data = "worked";
+//     let sec = 10;
+//     let data: String = state.redis.get_connection().unwrap().set_ex(_req, data, sec).unwrap();
+//     dbg!(&data);
+//     HttpResponse::Ok().body(data)
+// }
+
+// ------------------- Redis ----------------------
+// use actix_service::Service;
+// use actix_web::{middleware, web, App, HttpResponse, HttpServer};
+// use redis::AsyncCommands;
+// use std::time::Duration;
+
+// pub async fn cache_middleware<S>(
+//     req: actix_web::dev::ServiceRequest,
+//     srv: S,
+// ) -> Result<actix_web::dev::ServiceResponse, actix_web::Error>
+// where
+//     S: actix_web::dev::Service<
+//         Response = actix_web::dev::ServiceResponse,
+//         Error = actix_web::Error,
+//     >,
+// {
+//     // Get the Redis client from the request's app data
+//     let redis_client: redis::Client = req.app_data::<web::Data<redis::Client>>().unwrap().clone();
+
+//     // Generate a unique cache key based on the request method and URI
+//     let cache_key = format!("{}:{}", req.method(), req.uri());
+
+//     // Check if the response is already cached in Redis
+//     if let Ok(cached_response) = redis_client.get(&cache_key).await {
+//         if let Some(cached_response) = cached_response {
+//             // Return the cached response if found
+//             let response: HttpResponse = actix_web::HttpResponse::Ok()
+//                 .content_type("application/json")
+//                 .body(cached_response);
+//             return Ok(req.build_response(response));
+//         }
+//     }
+
+//     // If not cached, execute the request handler and cache the response
+//     let mut response = srv.call(req).await?;
+
+//     // Cache the response for future requests with the same cache key
+//     if let Some(body) = response.response().body().as_ref() {
+//         let response_body = body.to_vec();
+//         let _ = redis_client
+//             .set_ex(&cache_key, response_body, Duration::from_secs(60)) // Set a 60-second cache expiry
+//             .await;
+//     }
+
+//     Ok(response)
+// }
+// ------------------- Redis ----------------------
+
+// use actix_web::cookie::time::Duration;
+// use actix_web::http::StatusCode;
+// use actix_web::{middleware, web, App, HttpResponse, HttpServer, Result};
+// use redis::Commands;
+// // use redis::AsyncCommands;
+// use serde::{Deserialize, Serialize};
+// use std::collections::HashMap;
+
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// struct CachedResponse {
+//     status: u16,
+//     headers: HashMap<String, String>,
+//     body: Vec<u8>,
+// }
+
+// pub async fn cache_middleware(
+//     req: actix_web::HttpRequest,
+//     data: web::Data<crate::AppData>,
+// ) -> Result<actix_web::HttpResponse> {
+//     let cache_key = req.uri().to_string();
+//     let mut redis_conn = match data.redis.get_connection() {
+//         Ok(data) => data,
+//         Err(_) => panic!("Error"),
+//     };
+
+//     // Check if the response is cached in Redis
+//     let cached_check: String = match redis_conn.get(&cache_key) {
+//         Ok(data) => match data {
+//             Some(data) => data,
+//             None => panic!("Error"),
+//         },
+//         Err(_) => panic!("Error"),
+//     };
+
+//     let cached_response: HttpResponse = {
+//         let data: CachedResponse =
+//             serde_json::from_str(&cached_check).expect("Failed to Deserialize cached response");
+//         HttpResponse::build(StatusCode::from_u16(data.status).unwrap()).body(data.body)
+//     };
+
+//     // If the response is not cached, pass the request to the next middleware/handler
+//     let resp = req
+//         .clone()
+//         .into_parts()
+//         .0
+//         .app_data(data.clone())
+//         .clone()
+//         .call(req)
+//         .await?;
+
+//     // Cache the response in Redis
+//     let headers = resp.headers().clone();
+//     let status = resp.status().as_u16();
+//     let body = resp.body().await?;
+
+//     let cached_response = CachedResponse {
+//         status,
+//         headers: headers
+//             .iter()
+//             .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
+//             .collect(),
+//         body: body.to_vec(),
+//     };
+
+//     let serialized_response =
+//         serde_json::to_string(&cached_response).expect("Failed to serialize cached response");
+
+//     // Set cache with an expiration (adjust the duration as needed)
+//     match redis_conn.set_ex(&cache_key, &serialized_response, 10000) {
+//         Ok(data) => data,
+//         Err(_) => panic!("Error"),
+//     };
+
+//     Ok(resp)
+// }
