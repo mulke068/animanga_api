@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use surrealdb::sql::{Datetime, Thing};
 
-use super::search::MangaSearch;
 // ---------------------- Structs -------------------
 
 trait MangaField {
@@ -16,11 +15,18 @@ trait MangaField {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct MangaNames {
+    pub(super) original: String,
+    pub(super) en: String,
+    pub(super) jp: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Manga {
-    names: MangaSearch,
+    names: MangaNames,
     chapters: u16,
     volumes: u16,
-    score: u8,
+    score: f32,
     status: String,
     types: Vec<String>,
     platforms: Vec<String>,
@@ -61,7 +67,7 @@ struct MangaRecord {
 
 #[derive(Deserialize)]
 struct FormData {
-    id: String,
+    id: Option<String>,
 }
 
 // ---------------------------- Handlers ------------------------------
@@ -70,39 +76,60 @@ pub async fn handler_manga_get(req: HttpRequest, state: web::Data<AppData>) -> i
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
-    let cache = Caching::new(req.uri().to_string());
+    let cache = Caching::new(req.uri().to_string(), &state);
 
-    let cached_data: Option<String> = cache.get(&state).await;
-    match cached_data {
+    match cache.get().await {
         Some(data) => {
             // cache.timer_reset(&state).await;
             HttpResponse::Ok()
                 .append_header((
                     "X-Cache-Remaining-Time",
-                    cache.timer_get(&state).await.to_string(),
+                    cache.timer_get().await.to_string(),
                 ))
                 .body(data)
         }
         None => {
-            let record: Option<MangaRecord> = match state.surreal.select(("manga", &param.id)).await
-            {
-                Ok(data) => data,
-                Err(_) => None,
-            };
+            if let Some(id) = &param.id {
+                let record: Option<MangaRecord> = match state.surreal.select(("manga", id)).await {
+                    Ok(data) => data,
+                    Err(_) => None,
+                };
 
-            let res: String = match &record {
-                Some(data) => {
-                    let res = serde_json::to_string(&data)
-                        .unwrap_or_else(|_| panic!("Failed at Serialize data"));
-                    cache.set(&res, &state).await;
-                    res
+                let res: String = match &record {
+                    Some(data) => {
+                        let res = serde_json::to_string(&data)
+                            .unwrap_or_else(|_| panic!("Failed at Serialize data"));
+                        cache.set(&res).await;
+                        res
+                    }
+                    None => String::from("No Data Found"),
+                };
+
+                match &record {
+                    Some(_) => HttpResponse::Ok().body(res),
+                    None => HttpResponse::NotFound().body(res),
                 }
-                None => String::from("No Data Found"),
-            };
+            } else {
+                let record: Vec<MangaRecord> =
+                    match state.surreal.query("SELECT * FROM manga").await {
+                        Ok(mut data) => data.take(0).unwrap(),
+                        Err(_) => Vec::new(),
+                    };
 
-            match &record {
-                Some(_) => HttpResponse::Ok().body(res),
-                None => HttpResponse::NotFound().body(res),
+                let res: String = match &record.len() {
+                    0 => String::from("No Data Found"),
+                    _ => {
+                        let res = serde_json::to_string(&record)
+                            .unwrap_or_else(|_| panic!("Failed at Serialize data"));
+                        cache.set(&res).await;
+                        res
+                    }
+                };
+
+                match &record.len() {
+                    0 => HttpResponse::NotFound().body(res),
+                    _ => HttpResponse::Ok().body(res),
+                }
             }
         }
     }
@@ -129,14 +156,14 @@ pub async fn handler_manga_post(
     let res: String = match &record.len() {
         1 => {
             let data = &record[0];
-            let search_index = state.meilisearch.index("manga");
-            let names: MangaSearch = MangaSearch {
-                db_id: data.id.id.to_string(),
-                original: data.base.names.original.clone(),
-                en: data.base.names.en.clone(),
-                jp: data.base.names.jp.clone(),
-            };
-            names.create(search_index).await;
+            // let search_index = state.meilisearch.index("manga");
+            // let names: MangaSearch = MangaSearch {
+            //     db_id: data.id.id.to_string(),
+            //     original: data.base.names.original.clone(),
+            //     en: data.base.names.en.clone(),
+            //     jp: data.base.names.jp.clone(),
+            // };
+            // names.create(search_index).await;
             serde_json::to_string(&data).unwrap_or_else(|_| panic!("Failed at Serialize data"))
         }
         _ => String::from("Failed to Create"),
@@ -157,41 +184,46 @@ pub async fn handler_manga_patch(
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
-    let record: Option<MangaRecord> = match state
-        .surreal
-        .update(("manga", &param.id))
-        .merge(MangaUpdate {
-            base: payload.base(),
-            updated_at: Datetime::default(),
-        })
-        .await
-    {
-        Ok(data) => data,
-        Err(_) => None,
-    };
+    if let Some(id) = &param.id {
+        let record: Option<MangaRecord> = match state
+            .surreal
+            .update(("manga", id))
+            .merge(MangaUpdate {
+                base: payload.base(),
+                updated_at: Datetime::default(),
+            })
+            .await
+        {
+            Ok(data) => data,
+            Err(_) => None,
+        };
 
-    let res: String = match &record {
-        Some(data) => {
-            let search_index = state.meilisearch.index("manga");
-            let names: MangaSearch = MangaSearch {
-                db_id: data.id.id.to_string(),
-                original: data.base.names.original.clone(),
-                en: data.base.names.en.clone(),
-                jp: data.base.names.jp.clone(),
-            };
-            names.create(search_index).await;
-            serde_json::to_string(&data).unwrap_or_else(|_| panic!("Failed to Serialize to String"))
+        let res: String = match &record {
+            Some(data) => {
+                // let search_index = state.meilisearch.index("manga");
+                // let names: MangaSearch = MangaSearch {
+                //     db_id: data.id.id.to_string(),
+                //     original: data.base.names.original.clone(),
+                //     en: data.base.names.en.clone(),
+                //     jp: data.base.names.jp.clone(),
+                // };
+                // names.create(search_index).await;
+                serde_json::to_string(&data)
+                    .unwrap_or_else(|_| panic!("Failed to Serialize to String"))
+            }
+            None => String::from("No Data Found | Failed to Create"),
+        };
+
+        if let Some(data) = Some(&res) {
+            Caching::new(req.uri().to_string(), &state).set(data).await;
         }
-        None => String::from("No Data Found | Failed to Create"),
-    };
 
-    if let Some(data) = Some(&res) {
-        Caching::new(req.uri().to_string()).set(data, &state).await;
-    }
-
-    match &record {
-        Some(_) => HttpResponse::Created().body(res),
-        None => HttpResponse::NotFound().body(res),
+        match &record {
+            Some(_) => HttpResponse::Created().body(res),
+            None => HttpResponse::NotFound().body(res),
+        }
+    } else {
+        HttpResponse::BadRequest().body("No ID Provided")
     }
 }
 
@@ -199,15 +231,19 @@ pub async fn handler_manga_delete(req: HttpRequest, state: web::Data<AppData>) -
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
-    let record: Option<MangaRecord> = match state.surreal.delete(("manga", &param.id)).await {
-        Ok(data) => data,
-        Err(_) => None,
-    };
+    if let Some(id) = &param.id {
+        let record: Option<MangaRecord> = match state.surreal.delete(("manga", id)).await {
+            Ok(data) => data,
+            Err(_) => None,
+        };
 
-    Caching::new(req.uri().to_string()).delete(&state).await;
+        Caching::new(req.uri().to_string(), &state).delete().await;
 
-    match &record {
-        Some(_) => HttpResponse::Ok().body("Data Deleted"),
-        None => HttpResponse::NotFound().body("No Data Found"),
+        match &record {
+            Some(_) => HttpResponse::Ok().body("Data Deleted"),
+            None => HttpResponse::NotFound().body("No Data Found"),
+        }
+    } else {
+        HttpResponse::BadRequest().body("No ID Provided")
     }
 }

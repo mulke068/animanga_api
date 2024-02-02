@@ -1,21 +1,24 @@
+use std::collections::HashMap;
+
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
     HttpRequest, HttpResponse, Responder,
 };
-use meilisearch_sdk::{indexes::Index, search::SearchResults, task_info::TaskInfo};
 use serde::{Deserialize, Serialize};
+use surrealdb::sql::Thing;
 
-use crate::{search, AppData};
+use crate::AppData;
+
+use super::main::MangaNames;
 
 // ---------------------- Structs -------------------
 
-search!(MangaSearch {
-    db_id: String,
-    original: String,
-    en: String,
-    jp: String,
-});
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MangaSearch {
+    id: Thing,
+    names: MangaNames,
+}
 
 #[derive(Deserialize)]
 struct SearchForm {
@@ -25,31 +28,49 @@ struct SearchForm {
 
 // ---------------------- Handlers -------------------
 pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
-    let param = Query::<SearchForm>::from_query(&params.query_string()).unwrap();
-    let search_index = state.meilisearch.index("manga");
-
-    let record: Option<SearchResults<ContentRecord>> = search_index
-        .search()
-        .with_query(&param.q)
-        .with_limit(param.l)
-        .execute::<ContentRecord>()
-        .await
-        .ok();
-
-    match &record {
-        Some(data) => {
-            let res: Vec<&ContentRecord> = data.hits.iter().map(|res| &res.result).collect();
-            HttpResponse::Ok().json(res)
+    let query_string = params.query_string();
+    let mut q = "".to_string();
+    let mut l = 0;
+    for (key, value) in Query::<HashMap<String, String>>::from_query(query_string)
+        .unwrap_or_else(|_| Query(HashMap::new()))
+        .into_inner()
+    {
+        match key.as_str() {
+            "q" => q = value,
+            "l" => l = value.parse().unwrap_or(0),
+            _ => (),
         }
-        None => HttpResponse::NotFound().into(),
     }
-}
 
-pub async fn post(req: web::Json<MangaSearch>, state: web::Data<AppData>) -> impl Responder {
-    let search_index = state.meilisearch.index("manga");
+    let param = SearchForm { q, l };
 
-    let record: TaskInfo = req.create(search_index).await;
-    let res: String = format!("{:#?}", &record);
+    let record: Vec<MangaSearch> = state
+        .surreal
+        .query("SELECT id,names FROM manga;")
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
 
-    HttpResponse::Created().body(res)
+    if record.len() != 0 {
+        let mut filtered_data: Vec<&MangaSearch> = record
+            .iter()
+            .filter(|res| {
+                res.names.original.contains(&param.q)
+                    || res.names.en.contains(&param.q)
+                    || res.names.jp.contains(&param.q)
+            })
+            .collect();
+
+        if param.l != 0 {
+            let lenght = param.l.min(filtered_data.len());
+            filtered_data.truncate(lenght);
+        }
+
+        let res = serde_json::to_string(&filtered_data).unwrap_or("No Data Found".to_string());
+
+        HttpResponse::Ok().body(res)
+    } else {
+        HttpResponse::NotFound().body("Not Found")
+    }
 }

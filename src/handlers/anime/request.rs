@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::constructor::myanimelist::anime::Anime;
+// use crate::constructor::myanimelist::anime::Anime;
 
 async fn module_request_jikan(req: String) -> String {
     let client = reqwest::Client::new();

@@ -1,0 +1,59 @@
+use actix_web::{
+    web::{self, Query},
+    HttpRequest, HttpResponse, Responder,
+};
+
+use meilisearch_sdk::{indexes::Index, search::SearchResults, task_info::TaskInfo};
+use serde::{Deserialize, Serialize};
+use surrealdb::sql::Thing;
+
+use crate::{meilisearch, AppData};
+
+meilisearch!(AnimeSearch {
+    db_id: String,
+    original: String,
+    en: String,
+    jp: String,
+});
+
+use super::main::{AnimeNames, AnimeRecord};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SearchForm {
+    q: String,
+    l: usize,
+}
+
+pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+    let param = Query::<SearchForm>::from_query(&params.query_string()).unwrap();
+    let search_index = state.meilisearch.index("anime");
+    let limit = param.l;
+
+    let record: Option<SearchResults<ContentRecord>> = search_index
+        .search()
+        .with_query(&param.q)
+        .with_limit(limit)
+        .execute::<ContentRecord>()
+        .await
+        .ok();
+
+    match &record {
+        Some(data) => {
+            let res: Vec<&ContentRecord> = data.hits.iter().map(|res| &res.result).collect();
+            // let res = format!("{:?}", &data.hits);
+            HttpResponse::Ok().json(res)
+        }
+        None => HttpResponse::NotFound().body("body"),
+    }
+
+ 
+}
+
+pub async fn post(req: web::Json<AnimeSearch>, state: web::Data<AppData>) -> impl Responder {
+    let search_index = state.meilisearch.index("anime");
+
+    let record: TaskInfo = req.create(search_index).await;
+    let res: String = format!("{:#?}", &record);
+
+    HttpResponse::Created().body("Post")
+}

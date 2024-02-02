@@ -1,9 +1,10 @@
 #![recursion_limit = "500"]
 
 // -------------------- Imports --------------------
+use actix_cors::Cors;
 use actix_web::{/*guard,*/ middleware::Logger, web, App, HttpResponse, HttpServer, Responder,};
 use log::{error, info};
-use meilisearch_sdk::settings;
+// use meilisearch_sdk::settings;
 // ------------------------------------------------
 use surrealdb::engine::remote::ws::Ws;
 use surrealdb::opt::auth::Root;
@@ -21,7 +22,7 @@ async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
 
     let surreal_url =
-        std::env::var("SURREAL_URL").unwrap_or_else(|_| String::from("127.0.0.1:8008"));
+        std::env::var("SURREAL_URL").unwrap_or_else(|_| String::from("127.0.0.1:8000"));
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| String::from("redis://127.0.0.1"));
     let meilisearch_url =
@@ -95,29 +96,44 @@ async fn main() -> std::io::Result<()> {
     let client_meilisearch: meilisearch_sdk::Client =
         meilisearch_sdk::Client::new(meilisearch_url, Some("MASTER_KEY"));
 
-    {
-        let settings = settings::Settings {
-            ranking_rules: Some(vec![
-                "typo".to_string(),
-                "words".to_string(),
-                "proximity".to_string(),
-                "attribute".to_string(),
-                "wordsPosition".to_string(),
-                "exactness".to_string(),
-                "release_date:desc".to_string(),
-                "score:desc".to_string(),
-            ]),
-            ..Default::default()
-        };
-        client_meilisearch.index("anime").set_settings(&settings).await.unwrap();
-        client_meilisearch.index("manga").set_settings(&settings).await.unwrap();
-    }
+    //{
+    //    let settings = settings::Settings {
+    //      ranking_rules: Some(vec![
+    //            "typo".to_string(),
+    //            "words".to_string(),
+    //            "proximity".to_string(),
+    //            "attribute".to_string(),
+    //            "wordsPosition".to_string(),
+    //            "exactness".to_string(),
+    //            "release_date:desc".to_string(),
+    //            "score:desc".to_string(),
+    //        ]),
+    //        ..Default::default()
+    //    };
+    //    client_meilisearch
+    //        .index("anime")
+    //        .set_settings(&settings)
+    //        .await
+    //        .unwrap();
+    //    client_meilisearch
+    //        .index("manga")
+    //        .set_settings(&settings)
+    //        .await
+    //     .unwrap();
+    //}
 
     HttpServer::new(move || {
+        let logger = Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T");
+
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
+            .max_age(3600);
+
         App::new()
-            .wrap(Logger::new(
-                "%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T",
-            ))
+            .wrap(logger)
+            .wrap(cors)
             .app_data(web::Data::new(api::AppData {
                 surreal: client_surreal.clone(),
                 redis: client_redis.clone(),
@@ -172,8 +188,8 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::resource("/anime/search")
-                    .route(web::get().to(api::handlers::anime::search::get))
-                    .route(web::post().to(api::handlers::anime::search::post)),
+                    .route(web::get().to(api::handlers::anime::search::get)),
+                // .route(web::post().to(api::handlers::anime::search::post)),
             )
             .service(
                 web::resource("/manga/user")
@@ -186,8 +202,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::resource("/manga/search")
-                    .route(web::get().to(api::handlers::manga::search::get))
-                    .route(web::post().to(api::handlers::manga::search::post)),
+                    .route(web::get().to(api::handlers::manga::search::get)), // .route(web::post().to(api::handlers::manga::search::post)),
             )
             .service(
                 web::scope("/status")

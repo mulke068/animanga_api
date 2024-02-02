@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! search {
+macro_rules! meilisearch {
     ($struct_name: ident { $($field: ident : $ty: ty),* $(,)? }) => {
 
         trait ContentField {
