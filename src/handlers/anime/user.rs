@@ -1,4 +1,4 @@
-use crate::AppData;
+use crate::AppServices;
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
@@ -67,13 +67,13 @@ struct FormDataCreated {
 
 pub async fn handler_user_anime_get(
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at query from params"));
 
     let record: Option<UserAnimeRecord> =
-        match state.surreal.select(("user_anime", &param.id)).await {
+        match service.surreal.select(("user_anime", &param.id)).await {
             Ok(data) => data,
             Err(e) => panic!("{}", e),
         };
@@ -94,12 +94,12 @@ pub async fn handler_user_anime_get(
 pub async fn handler_user_anime_post(
     params: HttpRequest,
     req: web::Json<UserAnime>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormDataCreated>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("failed at query from params"));
 
-    let record: Option<UserAnimeRecord> = match state
+    let record: Option<UserAnimeRecord> = match service
         .surreal
         .query(
             "RELATE $user_id->user_anime->$anime_id SET 
@@ -142,12 +142,12 @@ pub async fn handler_user_anime_post(
 pub async fn handler_user_anime_patch(
     params: HttpRequest,
     req: web::Json<UserAnime>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at query from params"));
 
-    let record: Option<UserAnimeRecord> = match state
+    let record: Option<UserAnimeRecord> = match service
         .surreal
         .update(("user_anime", &param.id))
         .merge(UserAnimeUpdate {
@@ -175,13 +175,13 @@ pub async fn handler_user_anime_patch(
 
 pub async fn handler_user_anime_delete(
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from Params"));
 
     let record: Option<UserAnimeRecord> =
-        match state.surreal.delete(("user_anime", &param.id)).await {
+        match service.surreal.delete(("user_anime", &param.id)).await {
             Ok(data) => data,
             Err(_) => None,
         };

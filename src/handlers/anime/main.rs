@@ -1,4 +1,4 @@
-use crate::{middleware::caching::Caching, AppData};
+use crate::{middleware::caching::Caching, AppServices};
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
@@ -9,35 +9,35 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::{Datetime, Thing};
 // ---------------------- Structs -------------------
 
-trait AnimeField {
+pub trait AnimeField {
     fn base(&self) -> Anime;
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AnimeNames {
-    pub(super) original: String,
-    pub(super) en: String,
-    pub(super) jp: String,
+    pub original: String,
+    pub en: Option<String>,
+    pub jp: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Anime {
-    names: AnimeNames,
+    pub names: AnimeNames,
 
-    season: u8,
-    episodes: u8,
-    score: f32,
-    status: String,
+    pub season: i64,
+    pub episodes: i64,
+    pub score: f64,
+    pub status: String,
 
-    types: Vec<String>,
-    platforms: Vec<String>,
-    genres: Vec<String>,
-    tags: Vec<String>,
+    pub types: Vec<String>,
+    pub platforms: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
 
-    trailer_urls: Vec<String>,
-    info_urls: Vec<String>,
-    video_urls: Vec<String>,
-    image_urls: Vec<String>,
+    pub trailer_urls: Vec<String>,
+    pub info_urls: Vec<String>,
+    pub video_urls: Vec<String>,
+    pub image_urls: Vec<String>,
 }
 
 impl AnimeField for Anime {
@@ -47,12 +47,12 @@ impl AnimeField for Anime {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct AnimeCreate {
+pub struct AnimeCreate {
     #[serde(flatten)]
-    base: Anime,
+    pub base: Anime,
 
-    updated_at: Datetime,
-    created_at: Datetime,
+    pub updated_at: Datetime,
+    pub created_at: Datetime,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -62,6 +62,7 @@ struct AnimeUpdate {
 
     updated_at: Datetime,
 }
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AnimeRecord {
     id: Thing,
@@ -80,17 +81,20 @@ struct FormData {
 
 // ---------------------------- Handlers ------------------------------
 
-pub async fn handler_anime_get(req: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_anime_get(
+    req: HttpRequest,
+    service: web::Data<AppServices>,
+) -> impl Responder {
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to parse query string"));
 
-    let cache = Caching::new(req.uri().to_string(), &state);
+    let cache = Caching::new(req.uri().to_string(), &service);
 
     match cache.get().await {
         Some(data) => {
             log::info!("Data Found in cache");
 
-            // cache.timer_reset(&state).await;
+            // cache.timer_reset(&service).await;
             HttpResponse::Ok()
                 .append_header((
                     "X-Cache-Remaining-Time",
@@ -102,7 +106,8 @@ pub async fn handler_anime_get(req: HttpRequest, state: web::Data<AppData>) -> i
             log::info!("Data not found in cache");
 
             if let Some(id) = &param.id {
-                let record: Option<AnimeRecord> = match state.surreal.select(("anime", id)).await {
+                let record: Option<AnimeRecord> = match service.surreal.select(("anime", id)).await
+                {
                     Ok(data) => Some(data.unwrap()),
                     Err(_) => None,
                 };
@@ -123,7 +128,7 @@ pub async fn handler_anime_get(req: HttpRequest, state: web::Data<AppData>) -> i
                 };
             } else {
                 let record: Vec<AnimeRecord> =
-                    match state.surreal.query("SELECT * FROM anime").await {
+                    match service.surreal.query("SELECT * FROM anime").await {
                         Ok(mut data) => data.take(0).unwrap(),
                         Err(_) => Vec::new(),
                     };
@@ -144,9 +149,9 @@ pub async fn handler_anime_get(req: HttpRequest, state: web::Data<AppData>) -> i
 
 pub async fn handler_anime_post(
     payload: web::Json<Anime>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
-    let record: Vec<AnimeRecord> = match state
+    let record: Vec<AnimeRecord> = match service
         .surreal
         .create("anime")
         .content(AnimeCreate {
@@ -163,7 +168,7 @@ pub async fn handler_anime_post(
     let res: String = match &record.len() {
         1 => {
             let data = &record[0];
-            // let index = state.meilisearch.index("anime");
+            // let index = service.meilisearch.index("anime");
             // let name: AnimeSearch = AnimeSearch {
             //     db_id: data.id.id.to_string(),
             //     original: data.base.names.original.clone(),
@@ -177,6 +182,9 @@ pub async fn handler_anime_post(
     };
 
     if !&record.is_empty() {
+        Caching::new(String::from("/anime"), &service)
+            .delete()
+            .await;
         HttpResponse::Created().body(res)
     } else {
         HttpResponse::NotAcceptable().body(res)
@@ -186,13 +194,13 @@ pub async fn handler_anime_post(
 pub async fn handler_anime_patch(
     req: HttpRequest,
     payload: web::Json<Anime>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param: Query<FormData> = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed prase query to string"));
 
     if let Some(id) = &param.id {
-        let record: Option<AnimeRecord> = match state
+        let record: Option<AnimeRecord> = match service
             .surreal
             .update(("anime", id))
             .merge(AnimeUpdate {
@@ -207,7 +215,7 @@ pub async fn handler_anime_patch(
 
         let res: String = match &record {
             Some(data) => {
-                // let index = state.meilisearch.index("anime");
+                // let index = service.meilisearch.index("anime");
                 // let name: AnimeSearch = AnimeSearch {
                 //     db_id: data.id.id.to_string(),
                 //     original: data.base.names.original.clone(),
@@ -221,7 +229,9 @@ pub async fn handler_anime_patch(
         };
 
         if let Some(data) = Some(&res) {
-            Caching::new(req.uri().to_string(), &state).set(data).await;
+            Caching::new(req.uri().to_string(), &service)
+                .set(data)
+                .await;
         }
 
         match &record {
@@ -233,20 +243,45 @@ pub async fn handler_anime_patch(
     }
 }
 
-pub async fn handler_anime_delete(req: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_anime_delete(
+    req: HttpRequest,
+    service: web::Data<AppServices>,
+) -> impl Responder {
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to prase params to query"));
 
     if let Some(id) = &param.id {
-        let record: Option<AnimeRecord> = state.surreal.delete(("anime", id)).await.unwrap();
-
-        Caching::new(req.uri().to_string(), &state).delete().await;
-
-        match &record {
-            Some(_) => HttpResponse::Ok().body("Data Deleted"),
-            None => HttpResponse::NotFound().body("No Data Found"),
+        if let Ok(_data) = service
+            .surreal
+            .delete::<Option<AnimeRecord>>(("anime", id))
+            .await
+        {
+            Caching::new(req.uri().to_string(), &service).delete().await;
+            return HttpResponse::Ok().body("Data Deleted");
+        } else {
+            return HttpResponse::NotFound().body("No Data Found");
         }
     } else {
-        HttpResponse::BadRequest().body("Bad Request")
+        return HttpResponse::BadRequest().body("Bad Request");
     }
+
+    // if let Some(id) = &param.id {
+    //     match service.surreal.delete::<Option<AnimeRecord>>(("anime", id)).await {
+    //         Ok(record) => {
+    //             Caching::new(req.uri().to_string(), &service).delete().await;
+
+    //             match record {
+    //                 Some(_) => HttpResponse::Ok().body("Data Deleted"),
+    //                 None => HttpResponse::NotFound().body("No Data Found"),
+    //             }
+    //         }
+    //         Err(e) => {
+    //             // Log the error and return a response indicating that an error occurred
+    //             log::error!("Failed to delete record: {}", e);
+    //             HttpResponse::InternalServerError().body("Internal Server Error")
+    //         }
+    //     }
+    // } else {
+    //     HttpResponse::BadRequest().body("Bad Request")
+    // }
 }

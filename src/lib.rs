@@ -9,11 +9,11 @@ pub mod tests;
 /// # Where the DB client lives
 ///
 ///
-/// use crate::AppData;
+/// use crate::AppServices;
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub struct AppData {
+pub struct AppServices {
     pub surreal: surrealdb::Surreal<surrealdb::engine::remote::ws::Client>,
     pub redis: redis::Client,
     pub meilisearch: meilisearch_sdk::Client,

@@ -134,7 +134,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(logger)
             .wrap(cors)
-            .app_data(web::Data::new(api::AppData {
+            .app_data(web::Data::new(api::AppServices {
                 surreal: client_surreal.clone(),
                 redis: client_redis.clone(),
                 meilisearch: client_meilisearch.clone(),
@@ -169,15 +169,6 @@ async fn main() -> std::io::Result<()> {
                     .route(web::delete().to(api::handlers::anime::main::handler_anime_delete)),
             )
             .service(
-                web::resource("/manga")
-                    .name("manga")
-                    // .guard(guard::Header("Content-Type", "application/json"))
-                    .route(web::get().to(api::handlers::manga::main::handler_manga_get))
-                    .route(web::post().to(api::handlers::manga::main::handler_manga_post))
-                    .route(web::patch().to(api::handlers::manga::main::handler_manga_patch))
-                    .route(web::delete().to(api::handlers::manga::main::handler_manga_delete)),
-            )
-            .service(
                 web::resource("/anime/user")
                     .name("user_anime")
                     // .guard(guard::Header("Content-Type", "application/json"))
@@ -186,10 +177,20 @@ async fn main() -> std::io::Result<()> {
                     .route(web::patch().to(api::handlers::anime::user::handler_user_anime_patch))
                     .route(web::delete().to(api::handlers::anime::user::handler_user_anime_delete)),
             )
+            .route("/anime/import", web::post().to(api::handlers::anime::import::post))
             .service(
                 web::resource("/anime/search")
-                    .route(web::get().to(api::handlers::anime::search::get)),
-                // .route(web::post().to(api::handlers::anime::search::post)),
+                    .route(web::get().to(api::handlers::anime::search::get))
+                    .route(web::post().to(api::handlers::anime::search::post)),
+            )
+            .service(
+                web::resource("/manga")
+                    .name("manga")
+                    // .guard(guard::Header("Content-Type", "application/json"))
+                    .route(web::get().to(api::handlers::manga::main::handler_manga_get))
+                    .route(web::post().to(api::handlers::manga::main::handler_manga_post))
+                    .route(web::patch().to(api::handlers::manga::main::handler_manga_patch))
+                    .route(web::delete().to(api::handlers::manga::main::handler_manga_delete)),
             )
             .service(
                 web::resource("/manga/user")

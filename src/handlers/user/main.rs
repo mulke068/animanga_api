@@ -1,4 +1,4 @@
-use crate::AppData;
+use crate::AppServices;
 // ---------------------------- Imports ------------------------------
 use actix_web::{
     web::{self, Query},
@@ -76,11 +76,11 @@ struct FormData {
 }
 
 // ---------------------------- Handlers ------------------------------
-pub async fn handler_user_get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_user_get(params: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query params"));
 
-    let record: Option<UsersRecord> = match state.surreal.select(("user", &param.uid)).await {
+    let record: Option<UsersRecord> = match service.surreal.select(("user", &param.uid)).await {
         Ok(data) => data,
         Err(_) => None,
     };
@@ -98,8 +98,8 @@ pub async fn handler_user_get(params: HttpRequest, state: web::Data<AppData>) ->
     }
 }
 
-pub async fn handler_user_post(req: web::Json<Users>, state: web::Data<AppData>) -> impl Responder {
-    let record: Vec<UsersRecord> = match state
+pub async fn handler_user_post(req: web::Json<Users>, service: web::Data<AppServices>) -> impl Responder {
+    let record: Vec<UsersRecord> = match service
         .surreal
         .create("user")
         .content(UsersCreate {
@@ -131,12 +131,12 @@ pub async fn handler_user_post(req: web::Json<Users>, state: web::Data<AppData>)
 pub async fn handler_user_patch(
     req: web::Json<Users>,
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query params"));
 
-    let record: Option<UsersRecord> = match state
+    let record: Option<UsersRecord> = match service
         .surreal
         .update(("user", &param.uid))
         .merge(UsersUpdate {
@@ -162,11 +162,11 @@ pub async fn handler_user_patch(
     }
 }
 
-pub async fn handler_user_delete(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_user_delete(params: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query params"));
 
-    let record: Option<UsersRecord> = match state.surreal.delete(("user", &param.uid)).await {
+    let record: Option<UsersRecord> = match service.surreal.delete(("user", &param.uid)).await {
         Ok(data) => data,
         Err(_) => None,
     };

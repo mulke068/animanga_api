@@ -1,4 +1,4 @@
-use crate::{middleware::caching::Caching, AppData};
+use crate::{middleware::caching::Caching, AppServices};
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
@@ -72,15 +72,15 @@ struct FormData {
 
 // ---------------------------- Handlers ------------------------------
 
-pub async fn handler_manga_get(req: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_manga_get(req: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
-    let cache = Caching::new(req.uri().to_string(), &state);
+    let cache = Caching::new(req.uri().to_string(), &service);
 
     match cache.get().await {
         Some(data) => {
-            // cache.timer_reset(&state).await;
+            // cache.timer_reset(&service).await;
             HttpResponse::Ok()
                 .append_header((
                     "X-Cache-Remaining-Time",
@@ -90,7 +90,7 @@ pub async fn handler_manga_get(req: HttpRequest, state: web::Data<AppData>) -> i
         }
         None => {
             if let Some(id) = &param.id {
-                let record: Option<MangaRecord> = match state.surreal.select(("manga", id)).await {
+                let record: Option<MangaRecord> = match service.surreal.select(("manga", id)).await {
                     Ok(data) => data,
                     Err(_) => None,
                 };
@@ -111,7 +111,7 @@ pub async fn handler_manga_get(req: HttpRequest, state: web::Data<AppData>) -> i
                 }
             } else {
                 let record: Vec<MangaRecord> =
-                    match state.surreal.query("SELECT * FROM manga").await {
+                    match service.surreal.query("SELECT * FROM manga").await {
                         Ok(mut data) => data.take(0).unwrap(),
                         Err(_) => Vec::new(),
                     };
@@ -137,9 +137,9 @@ pub async fn handler_manga_get(req: HttpRequest, state: web::Data<AppData>) -> i
 
 pub async fn handler_manga_post(
     payload: web::Json<Manga>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
-    let record: Vec<MangaRecord> = match state
+    let record: Vec<MangaRecord> = match service
         .surreal
         .create("manga")
         .content(MangaCreate {
@@ -156,7 +156,7 @@ pub async fn handler_manga_post(
     let res: String = match &record.len() {
         1 => {
             let data = &record[0];
-            // let search_index = state.meilisearch.index("manga");
+            // let search_index = service.meilisearch.index("manga");
             // let names: MangaSearch = MangaSearch {
             //     db_id: data.id.id.to_string(),
             //     original: data.base.names.original.clone(),
@@ -179,13 +179,13 @@ pub async fn handler_manga_post(
 pub async fn handler_manga_patch(
     req: HttpRequest,
     payload: web::Json<Manga>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
     if let Some(id) = &param.id {
-        let record: Option<MangaRecord> = match state
+        let record: Option<MangaRecord> = match service
             .surreal
             .update(("manga", id))
             .merge(MangaUpdate {
@@ -200,7 +200,7 @@ pub async fn handler_manga_patch(
 
         let res: String = match &record {
             Some(data) => {
-                // let search_index = state.meilisearch.index("manga");
+                // let search_index = service.meilisearch.index("manga");
                 // let names: MangaSearch = MangaSearch {
                 //     db_id: data.id.id.to_string(),
                 //     original: data.base.names.original.clone(),
@@ -215,7 +215,7 @@ pub async fn handler_manga_patch(
         };
 
         if let Some(data) = Some(&res) {
-            Caching::new(req.uri().to_string(), &state).set(data).await;
+            Caching::new(req.uri().to_string(), &service).set(data).await;
         }
 
         match &record {
@@ -227,17 +227,17 @@ pub async fn handler_manga_patch(
     }
 }
 
-pub async fn handler_manga_delete(req: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn handler_manga_delete(req: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to query from params"));
 
     if let Some(id) = &param.id {
-        let record: Option<MangaRecord> = match state.surreal.delete(("manga", id)).await {
+        let record: Option<MangaRecord> = match service.surreal.delete(("manga", id)).await {
             Ok(data) => data,
             Err(_) => None,
         };
 
-        Caching::new(req.uri().to_string(), &state).delete().await;
+        Caching::new(req.uri().to_string(), &service).delete().await;
 
         match &record {
             Some(_) => HttpResponse::Ok().body("Data Deleted"),

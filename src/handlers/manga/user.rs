@@ -1,4 +1,4 @@
-use crate::AppData;
+use crate::AppServices;
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
@@ -68,13 +68,13 @@ struct FormDataCreated {
 
 pub async fn handler_user_manga_get(
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query the data"));
 
     let record: Option<UserMangaRecord> =
-        match state.surreal.select(("user_manga", &param.id)).await {
+        match service.surreal.select(("user_manga", &param.id)).await {
             Ok(data) => data,
             Err(e) => panic!("{}", e),
         };
@@ -95,12 +95,12 @@ pub async fn handler_user_manga_get(
 pub async fn handler_user_manga_post(
     params: HttpRequest,
     req: web::Json<UserManga>,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormDataCreated>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at parsing data"));
 
-    let record: Option<UserMangaRecord> = match state
+    let record: Option<UserMangaRecord> = match service
         .surreal
         .query(
             "RELATE $user_id->user_manga->$manga_id SET 
@@ -143,12 +143,12 @@ pub async fn handler_user_manga_post(
 pub async fn handler_user_manga_patch(
     req: web::Json<UserManga>,
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at parsing data"));
 
-    let record: Option<UserMangaRecord> = match state
+    let record: Option<UserMangaRecord> = match service
         .surreal
         .update(("user_manga", &param.id))
         .merge(UserMangaUpdate {
@@ -176,13 +176,13 @@ pub async fn handler_user_manga_patch(
 
 pub async fn handler_user_manga_delete(
     params: HttpRequest,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 ) -> impl Responder {
     let param = Query::<FormData>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at parsing data"));
 
     let record: Option<UserMangaRecord> =
-        match state.surreal.delete(("user_manga", &param.id)).await {
+        match service.surreal.delete(("user_manga", &param.id)).await {
             Ok(data) => data,
             Err(e) => panic!("{}", e),
         };

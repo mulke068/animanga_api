@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use actix_web::{
-    web::{self},
+    web::{self, Query},
     HttpRequest, HttpResponse, Responder,
 };
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
 use super::main::AnimeNames;
-use crate::AppData;
+use crate::AppServices;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AnimeSearch {
@@ -23,13 +23,13 @@ pub struct SearchForm {
     l: usize,
 }
 
-pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn get(params: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let query_string = params.query_string();
     let mut q = "".to_string();
     let mut l = 0;
 
-    for (key, value) in web::Query::<HashMap<String, String>>::from_query(query_string)
-        .unwrap_or_else(|_| actix_web::web::Query(HashMap::new()))
+    for (key, value) in Query::<HashMap<String, String>>::from_query(query_string)
+        .unwrap_or_else(|_| Query(HashMap::new()))
         .into_inner()
     {
         match key.as_str() {
@@ -41,7 +41,7 @@ pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Respond
 
     let param = SearchForm { q, l };
 
-    let record: Vec<AnimeSearch> = state
+    let record: Vec<AnimeSearch> = service
         .surreal
         .query("SELECT id,names FROM anime")
         .await
@@ -54,8 +54,8 @@ pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Respond
             .iter()
             .filter(|res| {
                 res.names.original.contains(&param.q)
-                    || res.names.en.contains(&param.q)
-                    || res.names.jp.contains(&param.q)
+                    || res.names.en.as_ref().map(|en| en.contains(&param.q)).unwrap_or(false)
+                    || res.names.jp.as_ref().map(|jp| jp.contains(&param.q)).unwrap_or(false)
             })
             .collect();
 
@@ -72,4 +72,24 @@ pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Respond
     } else {
         return HttpResponse::NotFound().body("No Data Found");
     }
+}
+
+pub async fn post(req: HttpRequest, _service: web::Data<AppServices>) -> impl Responder {
+    let query_string = req.query_string();
+    let mut q = "".to_string();
+    let mut l = 0;
+
+    for (key, value) in Query::<HashMap<String, String>>::from_query(query_string).unwrap_or_else(|_| Query(HashMap::new())).into_inner() {
+        match key.as_str() {
+            "q" => q = value,
+            "l" => l = value.parse().unwrap_or(0),
+            _ => (),
+        }
+    }
+
+    let param = SearchForm { q, l };
+
+    let res = super::request::module_request_jikan(param.q).await.unwrap();
+    
+    HttpResponse::Ok().body(res)
 }

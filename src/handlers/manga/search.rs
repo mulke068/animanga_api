@@ -8,7 +8,7 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
-use crate::AppData;
+use crate::AppServices;
 
 use super::main::MangaNames;
 
@@ -27,7 +27,7 @@ struct SearchForm {
 }
 
 // ---------------------- Handlers -------------------
-pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Responder {
+pub async fn get(params: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let query_string = params.query_string();
     let mut q = "".to_string();
     let mut l = 0;
@@ -44,7 +44,7 @@ pub async fn get(params: HttpRequest, state: web::Data<AppData>) -> impl Respond
 
     let param = SearchForm { q, l };
 
-    let record: Vec<MangaSearch> = state
+    let record: Vec<MangaSearch> = service
         .surreal
         .query("SELECT id,names FROM manga;")
         .await

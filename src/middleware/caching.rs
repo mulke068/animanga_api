@@ -2,7 +2,7 @@ use actix_web::web;
 use redis::{Commands, RedisError};
 use serde::{Deserialize, Serialize};
 
-use crate::AppData;
+use crate::AppServices;
 
 /// Test
 /// ```
@@ -18,10 +18,10 @@ pub struct Caching {
     // pub method: String,
     pub uri: String,
     pub time: usize,
-    state: web::Data<AppData>,
+    service: web::Data<AppServices>,
 }
 
-impl<'de> serde::Deserialize<'de> for AppData {
+impl<'de> serde::Deserialize<'de> for AppServices {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -31,9 +31,9 @@ impl<'de> serde::Deserialize<'de> for AppData {
     }
 }
 
-// Remove the implementation of Deserialize for &'a web::Data<AppData>
+// Remove the implementation of Deserialize for &'a web::Data<AppServices>
 
-impl Serialize for AppData {
+impl Serialize for AppServices {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -48,8 +48,8 @@ impl Serialize for AppData {
 impl<'a> Caching {
     /// ## Create a new construct
 
-    pub fn new(uri: String, state: &'a web::Data<AppData> ) -> Self {
-        Self { uri, time: 3600 , state: state.clone()}
+    pub fn new(uri: String, service: &'a web::Data<AppServices> ) -> Self {
+        Self { uri, time: 3600 , service: service.clone()}
     }
 
     /// ## Create the key from the Struct
@@ -62,7 +62,7 @@ impl<'a> Caching {
     /// ## Checks the connection to the cache
     
     fn connection(&self) -> Result<redis::Connection, RedisError> {
-        self.state.redis.get_connection()
+        self.service.redis.get_connection()
     }
 
     /// ## Gets the Data from the cache

@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+// https://api.consumet.org/anime/9anime/info/{id}
+
 #[derive(Serialize, Deserialize)]
 pub struct Anime9 {
     id: String,

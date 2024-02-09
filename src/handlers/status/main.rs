@@ -1,19 +1,19 @@
 use actix_web::{web, HttpResponse, Responder};
 
-use crate::AppData;
+use crate::AppServices;
 
 // ---------------------------- Imports ------------------------------
 // ---------------------------- Handlers ------------------------------
-pub async fn get(state: web::Data<AppData>) -> impl Responder {
+pub async fn get(service: web::Data<AppServices>) -> impl Responder {
     let mut res = String::from("");
 
-    if let Ok(_surreal) = state.surreal.health().await {
+    if let Ok(_surreal) = service.surreal.health().await {
         res.push_str("Surreal is connected");
     } else {
         res.push_str("Surreal is not connected");
     }
 
-    if let Ok(_redis) = state.redis.get_connection() {
+    if let Ok(_redis) = service.redis.get_connection() {
         res.push_str("\nRedis is connected");
     } else {
         res.push_str("\nRedis is not connected");
