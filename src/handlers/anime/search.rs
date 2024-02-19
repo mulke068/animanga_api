@@ -74,7 +74,7 @@ pub async fn get(params: HttpRequest, service: web::Data<AppServices>) -> impl R
     }
 }
 
-pub async fn post(req: HttpRequest, _service: web::Data<AppServices>) -> impl Responder {
+pub async fn post(req: HttpRequest, service: web::Data<AppServices>) -> impl Responder {
     let query_string = req.query_string();
     let mut q = "".to_string();
     let mut l = 0;
@@ -89,7 +89,21 @@ pub async fn post(req: HttpRequest, _service: web::Data<AppServices>) -> impl Re
 
     let param = SearchForm { q, l };
 
-    let res = super::request::module_request_jikan(param.q).await.unwrap();
-    
+    // let cache = Caching::new(req.uri().to_string(), &service);
+
+    // match cache.get().await {
+    //     Some(data) => {
+    //         HttpResponse::Ok().append_header(("X-Cache-Remaining-Time", cache.timer_get().await.to_string())).body(data)
+    //     }
+    //     None => {
+    //         let res = super::request::module_request_jikan(param.q).await.unwrap();
+    //         {
+    //             cache.set(&res).await;
+    //         }
+    //         HttpResponse::Ok().body(res)
+    //     }
+    // }
+    let res = super::request::module_request_jikan(param.q, service).await.unwrap();
+
     HttpResponse::Ok().body(res)
 }

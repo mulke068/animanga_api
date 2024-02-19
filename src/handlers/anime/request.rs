@@ -2,34 +2,61 @@
 
 // use crate::constructor::jikan::search::anime::Anime;
 
+use actix_web::web;
+
 use crate::constructor::jikan::anime::Search as AnimeSearch;
 use crate::constructor::jikan::anime::Status;
 use crate::handlers::anime::main::{Anime, AnimeNames};
+use crate::middleware::caching::Caching;
 use crate::modules::error_handler::CustomError;
+use crate::AppServices;
 
-pub(super) async fn module_request_jikan(req: String) -> Result<String, CustomError> {
+pub(super) async fn module_request_jikan(
+    req: String,
+    service: web::Data<AppServices>,
+) -> Result<String, CustomError> {
     let time_start = std::time::Instant::now();
     let client = reqwest::Client::new();
 
     let url = format!("https://api.jikan.moe/v4/anime?q={}", req);
 
+    let cache = Caching::new(url.clone(), &service);
+
+    let body: String;
+
     {
         log::info!("Request URL: {:?}", url);
     }
 
-    let body = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| CustomError::RequestError(e.to_string()))?
-        .text()
-        .await
-        .map_err(|e| CustomError::ParseError(e.to_string()))?;
-
-    {
-        log::info!("Request Received");
-        log::info!("Request Time: {:?}", time_start.elapsed());
+    match cache.get().await {
+        Some(data) => {
+            body = data;
+            {
+                log::info!("Data Found in cache");
+                log::info!("Cache Time: {:?}", time_start.elapsed());
+            }
+        }
+        None => {
+            body = client
+                .get(url.clone())
+                .send()
+                .await
+                .map_err(|e| CustomError::RequestError(e.to_string()))?
+                .text()
+                .await
+                .map_err(|e| CustomError::ParseError(e.to_string()))?;
+            {
+                log::info!("Request Received");
+                log::info!("Request Time: {:?}", time_start.elapsed());
+            }
+            cache.set(&body).await;
+            {
+                log::info!("Data Cached");
+                log::info!("Cache Time: {:?}", time_start.elapsed());
+            }
+        }
     }
+
 
     let req: AnimeSearch =
         serde_json::from_str(&body).map_err(|e| CustomError::ConstructError(e.to_string()))?;
@@ -113,12 +140,6 @@ fn convert_search_to_anime(search: &AnimeSearch) -> Vec<Anime> {
 
             let genres = data.genres.iter().map(|genre| genre.name.clone()).collect();
 
-            // let tags = data
-            //     .themes
-            //     .iter()
-            //     .map(|genre| genre.name.clone())
-            //     .chain(data.demographics.iter().map(|genre| genre.as_ref().unwrap_or(&serde_json::Value::Null).to_string()))
-            //     .collect();
             let tags = data
                 .themes
                 .iter()
