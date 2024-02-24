@@ -3,7 +3,7 @@ FROM rust:latest
 
 WORKDIR /usr/src/api
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 
 #RUN cargo build
 
