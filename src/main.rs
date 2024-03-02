@@ -27,8 +27,19 @@ async fn main() -> std::io::Result<()> {
         std::env::var("REDIS_URL").unwrap_or_else(|_| String::from("redis://127.0.0.1"));
     let meilisearch_url =
         std::env::var("MEILISEARCH_URL").unwrap_or_else(|_| String::from("http://127.0.0.1:7700"));
+    let app_url: String = std::env::var("API_URL").unwrap_or_else(|_| String::from("172.0.0.1"));
+    let app_port: String = std::env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
 
     api::middleware::logger::setup_logger();
+
+    {
+        info!("Starting Server");
+        info!("Surreal URL: {}", &surreal_url);
+        info!("Redis URL: {}", &redis_url);
+        info!("Meilisearch URL: {}", &meilisearch_url);
+        info!("APP v4 Running on: {}:{}", &app_url, &app_port);
+        // info!("APP v6 Running on: [::1]:{}", &app_port);
+    }
 
     match client_surreal.connect::<Ws>(surreal_url).await {
         Ok(client) => {
@@ -177,7 +188,10 @@ async fn main() -> std::io::Result<()> {
                     .route(web::patch().to(api::handlers::anime::user::handler_user_anime_patch))
                     .route(web::delete().to(api::handlers::anime::user::handler_user_anime_delete)),
             )
-            .route("/anime/import", web::post().to(api::handlers::anime::import::post))
+            .route(
+                "/anime/import",
+                web::post().to(api::handlers::anime::import::post),
+            )
             .service(
                 web::resource("/anime/search")
                     .route(web::get().to(api::handlers::anime::search::get))
@@ -216,7 +230,11 @@ async fn main() -> std::io::Result<()> {
             )
             .route("/", web::get().to(main_page))
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind((
+        app_url.as_str(),
+        app_port.to_string().parse::<u16>().unwrap(),
+    ))?
+    // .bind(format!("[[::1]]:{app_port}"))?
     .run()
     .await
 }
