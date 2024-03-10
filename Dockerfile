@@ -1,7 +1,8 @@
 
 FROM rust:latest
 
-WORKDIR /usr/src/api
+# WORKDIR /usr/src/api
+WORKDIR /api
 
 COPY Cargo.toml ./
 
