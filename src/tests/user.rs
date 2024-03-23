@@ -1,4 +1,4 @@
-use crate::handlers::user::main::*;
+use crate::handlers::user::{main::*, user_structs::UsersRecord};
 use actix_web::{test, web, App};
 use reqwest::StatusCode;
 use serde_json::json;
@@ -36,7 +36,7 @@ async fn test_create() {
     let body: UsersRecord = test::try_read_body_json(resp).await.unwrap();
     assert_eq!(body.base.name.first, "test_first_name");
     assert_eq!(body.base.password, "test_password");
-    assert_eq!(body.base.permission.grade, 1);
+    assert_eq!(body.base.permission.unwrap().grade, 1);
 
     let _id = body.id.id.to_string();
 }
@@ -87,5 +87,5 @@ async fn test_update() {
 
     assert_eq!(body.base.name.first, "test_first_name");
     assert_eq!(body.base.password, "test_password");
-    assert_eq!(body.base.permission.grade, 1);
+    assert_eq!(body.base.permission.unwrap().grade, 1);
 }
