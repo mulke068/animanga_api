@@ -174,13 +174,8 @@ async fn main() -> std::io::Result<()> {
                 web::resource("/user/auth")
                     .name("user_auth")
                     // .guard(guard::Header("Content-Type", "application/json"))
-                    .route(web::get().to(api::handlers::user::auth::handler_user_auth_get)),
-            )
-            .service(
-                web::resource("/user/login")
-                    .name("user_login")
-                    // .guard(guard::Header("Content-Type", "application/json"))
-                    .route(web::post().to(api::handlers::user::auth::login::handler_user_login_post)),
+                    .route(web::get().to(api::handlers::user::auth::handler_user_auth_get))
+                    .route(web::post().to(api::handlers::user::auth::handler_user_login_post)),
             )
             .service(
                 web::resource("/anime")
