@@ -14,7 +14,10 @@ use super::user_structs::UsersRecord;
 
 pub trait AccountField {
     fn base(&self) -> Account;
-    async fn find_uid(&self, service: web::Data<AppServices>) -> String;
+    fn authenticate_user(
+        &self,
+        service: web::Data<AppServices>,
+    ) -> impl std::future::Future<Output = String> + Send;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -41,7 +44,12 @@ impl AccountField for Account {
         self.clone()
     }
 
-    async fn find_uid(&self, service: web::Data<AppServices>) -> String {
+    // Authenticate User
+    // If the user is not found, it will return an empty string
+    // If the user is found, it will return the user id
+    // @return String
+    #[inline]
+    async fn authenticate_user(&self, service: web::Data<AppServices>) -> String /* GET USER ID */ {
         let username = self.username.clone();
         let password = self.password.clone();
 
@@ -63,31 +71,31 @@ impl AccountField for Account {
     }
 }
 
-async fn find_user(uid: &str, service: web::Data<AppServices>) -> bool {
-    let record: Option<UsersRecord> = service.surreal.select(("user", uid)).await.unwrap();
+async fn find_token_or_uid(search: &str, service: web::Data<AppServices>) -> String {
+    let query = format!("SELECT * FROM token WHERE {:?}", &search.to_string());
 
-    record.is_some()
-}
-
-async fn find_token(token: &str, service: web::Data<AppServices>) -> String {
-    let query = format!("SELECT * FROM token WHERE token = {}", &token.to_string());
+    // log::info!("Query: {}", &query);
 
     let record: Vec<TokenRecord> = match service.surreal.query(&query).await {
         Ok(mut data) => data.take(0).unwrap(),
         Err(e) => {
-            eprintln!("Surrealdb Query Problem {}", e);
+            log::error!("Error At Surrealdb: {:?}", e);
             Vec::new()
         }
     };
 
+    // log::info!("Record: {:?}", &record);
+
     let res = match &record.len() {
         1 => {
-            let data = &record[1].out.id;
-            serde_json::to_string(&data).unwrap()
+            let uid = &record[0].out.id.to_string();
+            let token = &record[0].token;
+            format!("{{\"token\": {:?}, \"uid\": {:?}}}", &token, &uid)
+            // serde_json::to_string(&data).unwrap()
         }
         _ => {
-            eprintln!("No Data Found");
-            "Data Not Found".to_string()
+            log::error!("No Token Found");
+            "Token Not Found".to_string()
         }
     };
 
@@ -115,18 +123,19 @@ async fn create_token(uid: &str, service: web::Data<AppServices>) -> String {
         .await
     {
         Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error At Surrealdb: {:?}", e);
+        Err(_e) => {
+            // log::error!("Error At Surrealdb: {:?}", e);
             Vec::new()
         }
     };
 
-    let res: String = match &record.len() {
+    let res = match &record.len() {
         1 => {
             let data = &record[0].token;
-            serde_json::to_string(&data).unwrap()
+            data.to_string()
+            // serde_json::to_string(&data).unwrap()
         }
-        _ => String::from("Data Not Found"),
+        _ => String::from("Error Creating Token"),
     };
 
     res
@@ -144,13 +153,11 @@ pub async fn handler_user_auth_get(
     let param = Query::<QToken>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed to query params"));
 
-    // log::info!("Token: {}", param.token);
-    //
-    let uid: String = find_token(&param.token, service.clone()).await;
+    //log::info!("Token: {}", param.token);
 
-    match find_user(&uid, service.clone()).await {
-        true => HttpResponse::Ok().json(&uid),
-        false => HttpResponse::NotFound().body("Your token is invalid"),
+    match Some(find_token_or_uid(&param.token, service.clone()).await) {
+        Some(u_token) => HttpResponse::Found().body(u_token),
+        None => HttpResponse::NotFound().body("Your token is invalid"),
     }
 }
 
@@ -160,9 +167,28 @@ pub async fn handler_user_login_post(
 ) -> impl Responder {
     let account = params.into_inner();
 
-    let uid = account.find_uid(service.clone()).await;
-    let token = create_token(&uid, service.clone()).await;
+    //log::info!("Account: {:?}", &account);
 
-    let result = format!("{{\"token\": \"{:?}\", \"uid\": {:?}}}", &token, &uid);
-    HttpResponse::Ok().body(result)
+    let uid = account.authenticate_user(service.clone()).await;
+
+    //log::info!("UID: {:?}", &uid);
+
+    let find_user_token: String = find_token_or_uid(&uid, service.clone()).await;
+
+    //log::info!("Token: {:?}", &token);
+
+    if &find_user_token != "Token Not Found" {
+
+        return HttpResponse::Found().body(find_user_token);
+
+    } else if !&find_user_token.is_empty() {
+
+        let token = create_token(&uid, service.clone()).await;
+
+        let result = format!("{{\"token\": \"{}\", \"uid\": {:?}}}", &token, &uid);
+        return HttpResponse::Created().body(result)
+
+    } else {
+        return HttpResponse::NotFound().body("Your token is invalid");
+    }
 }

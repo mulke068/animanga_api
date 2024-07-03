@@ -5,7 +5,6 @@
 use actix_web::web;
 
 use crate::constructor::jikan::anime::Search as AnimeSearch;
-use crate::constructor::jikan::anime::Status;
 use crate::handlers::anime::main::{Anime, AnimeNames};
 use crate::middleware::caching::Caching;
 use crate::modules::error_handler::CustomError;
@@ -101,14 +100,15 @@ fn convert_search_to_anime(search: &AnimeSearch) -> Vec<Anime> {
                 jp: Some(data.title_japanese.clone().unwrap_or_default()),
             };
 
-            let status = match data.status {
-                Status::FinishedAiring => "Finished Airing".to_string(),
-                Status::CurrentlyAiring => "Currently Airing".to_string(),
-                Status::NotYetAired => "Not Yet Aired".to_string(),
-                Status::Cancelled => "Cancelled".to_string(),
-                Status::Hiatus => "Hiatus".to_string(),
-                Status::TBA => "TBA".to_string(),
-            };
+            let status = format!("{:?}", &data.status);
+            // let status = match data.status {
+            //     Status::FinishedAiring => "Finished Airing".to_string(),
+            //     Status::CurrentlyAiring => "Currently Airing".to_string(),
+            //     Status::NotYetAired => "Not Yet Aired".to_string(),
+            //     Status::Cancelled => "Cancelled".to_string(),
+            //     Status::Hiatus => "Hiatus".to_string(),
+            //     Status::TBA => "TBA".to_string(),
+            // };
 
             let mut types = vec![];
             // if let Some(data_type) = &data.data_type {

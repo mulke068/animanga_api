@@ -31,7 +31,7 @@ pub struct Search {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Data {
-    pub mal_id: i64,
+    pub mal_id: Option<i64>,
 
     pub url: String,
 
@@ -70,15 +70,15 @@ pub struct Data {
 
     pub score: Option<f64>,
 
-    pub scored_by: i64,
+    pub scored_by: Option<i64>,
 
     pub rank: Option<i64>,
 
-    pub popularity: i64,
+    pub popularity: Option<i64>,
 
-    pub members: i64,
+    pub members: Option<i64>,
 
-    pub favorites: i64,
+    pub favorites: Option<i64>,
 
     pub synopsis: Option<String>,
 
@@ -157,11 +157,19 @@ pub enum DataType {
     Tv,
     
     Movie,
+    
+    Music,
+
+    #[serde(rename = "Mixed media")]
+    MixedMedia,
+
+    #[serde(rename = "4-koma manga")]
+    KomaManga,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Genre {
-    pub mal_id: i64,
+    pub mal_id: Option<i64>,
 
     #[serde(rename = "type")]
     pub genre_type: GenreType,
@@ -204,6 +212,12 @@ pub enum Rating {
 
     #[serde(rename = "Rx - Hentai")]
     RxHentai,
+
+    #[serde(rename = "G - All Ages")]
+    GAllAges,
+
+    #[serde(rename = "None")]
+    None,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -217,6 +231,52 @@ pub enum Source {
 
     #[serde(rename = "Visual novel")]
     VisualNovel,
+
+    #[serde(rename = "Mixed media")]
+    MixedMedia,
+
+    #[serde(rename = "4-koma manga")]
+    KomaManga,
+
+    #[serde(rename = "Web manga")]
+    WebManga,
+
+    #[serde(rename = "Digital manga")]
+    DigitalManga,
+
+    #[serde(rename = "Picture book")]
+    PictureBook,
+
+    #[serde(rename = "Novel")]
+    Novel,
+
+    #[serde(rename = "One-shot")]
+    OneShot,
+
+    #[serde(rename = "Doujinshi")]
+    Doujinshi,
+
+    #[serde(rename = "Unknown")]
+    Unknown,
+
+    #[serde(rename = "Game")]
+    Game,
+
+    #[serde(rename = "Music")]
+    Music,
+
+    #[serde(rename = "Other")]
+    Other,
+
+    #[serde(rename = "Radio")]
+    Radio,
+
+    #[serde(rename = "Card game")]
+    CardGame,
+
+    #[serde(rename = "Book")]
+    Book,
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -315,20 +375,20 @@ pub struct Theme {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Pagination {
-    pub last_visible_page: i64,
+    pub last_visible_page: Option<i64>,
 
     pub has_next_page: bool,
 
-    pub current_page: i64,
+    pub current_page: Option<i64>,
 
     pub items: Items,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Items {
-    pub count: i64,
+    pub count: Option<i64>,
 
-    pub total: i64,
+    pub total: Option<i64>,
 
-    pub per_page: i64,
+    pub per_page: Option<i64>,
 }

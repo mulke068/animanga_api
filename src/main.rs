@@ -4,7 +4,6 @@
 use actix_cors::Cors;
 use actix_web::{/*guard,*/ middleware::Logger, web, App, HttpResponse, HttpServer, Responder,};
 use log::{error, info};
-// use meilisearch_sdk::settings;
 // ------------------------------------------------
 use surrealdb::engine::remote::ws::Ws;
 use surrealdb::opt::auth::Root;
@@ -25,8 +24,6 @@ async fn main() -> std::io::Result<()> {
         std::env::var("SURREAL_URL").unwrap_or_else(|_| String::from("127.0.0.1:8000"));
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| String::from("redis://127.0.0.1"));
-    let meilisearch_url =
-        std::env::var("MEILISEARCH_URL").unwrap_or_else(|_| String::from("http://127.0.0.1:7700"));
     let app_url: String = std::env::var("API_URL").unwrap_or_else(|_| String::from("172.0.0.1"));
     let app_port: String = std::env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
 
@@ -34,10 +31,9 @@ async fn main() -> std::io::Result<()> {
 
     {
         info!("Starting Server");
-        info!("Surreal URL: {}", &surreal_url);
-        info!("Redis URL: {}", &redis_url);
-        info!("Meilisearch URL: {}", &meilisearch_url);
-        info!("APP v4 Running on: {}:{}", &app_url, &app_port);
+        info!("Surreal URL  : {}", &surreal_url);
+        info!("Redis URL    : {}", &redis_url);
+        info!("APP v4 Running on : {}:{}", &app_url, &app_port);
         // info!("APP v6 Running on: [::1]:{}", &app_port);
     }
 
@@ -67,25 +63,7 @@ async fn main() -> std::io::Result<()> {
         Err(_) => error!("Failed to connect to Namespace and Database"),
     }
 
-    // let client_surreal: Surreal<surrealdb::engine::remote::ws::Client> =
-    //     match Surreal::new::<Ws>(surreal_url).await {
-    //         Ok(client) => {
-    //             info!("Connected to surrealdb");
-    //             client
-    //                 .signin(Root {
-    //                     username: "root",
-    //                     password: "root",
-    //                 })
-    //                 .await
-    //                 .unwrap();
-    //             client.use_ns("test").use_db("test").await.unwrap();
-    //             client
-    //         }
-    //         Err(_) => {
-    //             error!("Failed to connect to surrealdb");
-    //             return Ok(());
-    //         }
-    //     };
+
 
     let client_redis: redis::Client = match redis::Client::open(redis_url) {
         Ok(client) => {
@@ -103,9 +81,6 @@ async fn main() -> std::io::Result<()> {
             return Ok(());
         }
     };
-
-    let client_meilisearch: meilisearch_sdk::Client =
-        meilisearch_sdk::Client::new(meilisearch_url, Some("MASTER_KEY"));
 
     //{
     //    let settings = settings::Settings {
@@ -148,7 +123,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(api::AppServices {
                 surreal: client_surreal.clone(),
                 redis: client_redis.clone(),
-                meilisearch: client_meilisearch.clone(),
             }))
             // .wrap_fn(api::middleware::cache_middleware)
             // .wrap_fn(|req, srv| {

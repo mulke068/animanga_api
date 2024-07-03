@@ -7,6 +7,7 @@ use super::main::*;
 
 pub async fn post(req: web::Json<Vec<Anime>>, services: web::Data<AppServices>) -> impl Responder {
     let mut counter: usize = 0;
+    let mut error_counter: usize = 0;
 
     for anime in req.iter() {
         let _record: Vec<AnimeRecord> = match services.surreal.create("anime").content(AnimeCreate {
@@ -15,13 +16,19 @@ pub async fn post(req: web::Json<Vec<Anime>>, services: web::Data<AppServices>) 
             created_at: Datetime::default(),
         }).await {
             Ok(data) => data,
-            Err(_) => Vec::new(),
+            Err(e) => {
+                log::error!("Error At Surrealdb: {:?}", e);
+                error_counter += 1;
+                Vec::new()
+            },
         };
         counter += 1;
     }
 
     {
-        log::info!("{} records created", counter);
+        log::info!("{} Record Count", counter);
+        log::info!("{} Records created", counter - error_counter);
+        log::info!("{} Records failed", error_counter);
     }
 
     if counter == req.len() {

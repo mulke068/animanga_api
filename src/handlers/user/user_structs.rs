@@ -5,8 +5,8 @@ use surrealdb::sql::{Datetime, Thing};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserPermission {
     pub grade: u8,
-    pub read: bool,
-    pub write: bool,
+    pub create: bool,
+    pub select: bool,
     pub update: bool,
     pub delete: bool,
 }
@@ -52,13 +52,12 @@ impl UsersField for Users {
         if self.permission.is_none() {
             self.permission = Some(UserPermission {
                 grade: 254,
-                read: true,
-                write: false,
+                create: false,
+                select: false,
                 update: false,
                 delete: false,
             });
         }
-
 
         UsersCreate {
             base: Users {

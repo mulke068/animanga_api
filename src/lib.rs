@@ -16,7 +16,7 @@ pub mod tests;
 pub struct AppServices {
     pub surreal: surrealdb::Surreal<surrealdb::engine::remote::ws::Client>,
     pub redis: redis::Client,
-    pub meilisearch: meilisearch_sdk::Client,
+    // pub meilisearch: meilisearch_sdk::Client,
 }
 
 /// ## Split String at char
