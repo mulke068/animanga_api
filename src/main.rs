@@ -1,5 +1,7 @@
 #![recursion_limit = "500"]
 
+use std::time::Duration;
+
 // -------------------- Imports --------------------
 use actix_cors::Cors;
 use actix_web::{/*guard,*/ middleware::Logger, web, App, HttpResponse, HttpServer, Responder,};
@@ -10,6 +12,8 @@ use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 // --------------------- Main ---------------------
 use once_cell::sync::Lazy;
+use tokio::time::sleep;
+
 #[allow(non_upper_case_globals)]
 static client_surreal: Lazy<Surreal<surrealdb::engine::remote::ws::Client>> =
     Lazy::new(|| Surreal::init());
@@ -31,39 +35,51 @@ async fn main() -> std::io::Result<()> {
 
     {
         info!("Starting Server");
-        info!("Surreal URL  : {}", &surreal_url);
-        info!("Redis URL    : {}", &redis_url);
-        info!("APP v4 Running on : {}:{}", &app_url, &app_port);
+        info!("Surreal URL          : {}", &surreal_url);
+        info!("Redis URL            : {}", &redis_url);
+        info!("APP v4 Running on    : {}:{}", &app_url, &app_port);
         // info!("APP v6 Running on: [::1]:{}", &app_port);
     }
 
-    match client_surreal.connect::<Ws>(surreal_url).await {
-        Ok(client) => {
-            info!("Connected to surrealdb");
-            client
-        }
-        Err(_) => error!("Failed to connect to surrealdb"),
-    };
 
-    match client_surreal
-        .signin(Root {
-            username: "root",
-            password: "root",
-        })
-        .await
-    {
-        Ok(signin) => Some(signin),
-        Err(_) => {
-            error!("Failed to signin");
-            None
+    loop {
+        match client_surreal.connect::<Ws>(surreal_url.clone()).await {
+            Ok(_) => {
+                info!("Connected to SurrealDB");
+
+                match client_surreal
+                    .signin(Root {
+                        username: "root",
+                        password: "root",
+                    })
+                    .await
+                {
+                    Ok(_) => {
+                        info!("Signed into SurrealDB");
+
+                        match client_surreal.use_ns("test").use_db("test").await {
+                            Ok(_) => {
+                                info!("Connected to SurrealDB namespace and database");
+                                break;
+                            }
+                            Err(_) => {
+                                error!("Failed to connect to SurrealDB namespace and database: . Retrying in 1 second...");
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        error!("Failed to signin to SurrealDB: . Retrying in 1 second...");
+                    }
+                }
+            }
+            Err(_) => {
+                error!("Failed to connect to SurrealDB: . Retrying in 1 second...");
+            }
         }
-    };
-    match client_surreal.use_ns("test").use_db("test").await {
-        Ok(db) => db,
-        Err(_) => error!("Failed to connect to Namespace and Database"),
+
+        sleep(Duration::from_secs(1)).await;
+        log::info!("Retrying to connect to SurrealDB");
     }
-
-
 
     let client_redis: redis::Client = match redis::Client::open(redis_url) {
         Ok(client) => {
@@ -96,17 +112,6 @@ async fn main() -> std::io::Result<()> {
     //        ]),
     //        ..Default::default()
     //    };
-    //    client_meilisearch
-    //        .index("anime")
-    //        .set_settings(&settings)
-    //        .await
-    //        .unwrap();
-    //    client_meilisearch
-    //        .index("manga")
-    //        .set_settings(&settings)
-    //        .await
-    //     .unwrap();
-    //}
 
     HttpServer::new(move || {
         let logger = Logger::new("%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T");
@@ -135,6 +140,9 @@ async fn main() -> std::io::Result<()> {
             //         Ok(res)
             //     }
             // })
+            .service(
+                web::resource("/ws").route(web::get().to(api::handlers::ws::main::handler_ws)),
+            )
             .service(
                 web::resource("/user")
                     .name("user")
@@ -222,5 +230,5 @@ async fn main() -> std::io::Result<()> {
 
 // ------------------------------------------------
 async fn main_page() -> impl Responder {
-    HttpResponse::Ok().body("Home Page\n-> to /user\n-> to /anime\n-> to /manga")
+    HttpResponse::Ok().body("Home Page\n-> to /user\n-> to /anime\n-> to /manga\n-> to /status\n-> to /ws")
 }

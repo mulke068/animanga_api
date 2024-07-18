@@ -80,38 +80,80 @@ struct FormData {
 }
 
 // ---------------------------- Handlers ------------------------------
+use chrono::{DateTime, Utc};
+use log::info;
 
 pub async fn handler_anime_get(
     req: HttpRequest,
     service: web::Data<AppServices>,
 ) -> impl Responder {
+    // Capture the start time
+    let start_time = Utc::now();
+
+    // Step 1: Parse query string
+    let step1_start = Utc::now();
     let param = Query::<FormData>::from_query(&req.query_string())
         .unwrap_or_else(|_| panic!("Failed to parse query string"));
+    let step1_end = Utc::now();
 
+    // Step 2: Create cache object
+    let step2_start = step1_end;
     let cache = Caching::new(req.uri().to_string(), &service);
+    let step2_end = Utc::now();
 
-    match cache.get().await {
+    // Step 3: Check cache
+    let step3_start = step2_end;
+    let cache_data = cache.get().await;
+    let step3_end = Utc::now();
+
+    // Initialize variables for logging
+    let mut step4_start: DateTime<Utc> = Utc::now();
+    let mut step4_end: DateTime<Utc> = Utc::now();
+    let mut step5_start: DateTime<Utc> = Utc::now();
+    let mut step5_end: DateTime<Utc> = Utc::now();
+    let mut step6_start: DateTime<Utc> = Utc::now();
+    let mut step6_end: DateTime<Utc> = Utc::now();
+    let mut step7_start: DateTime<Utc> = Utc::now();
+    let mut step7_end: DateTime<Utc> = Utc::now();
+    let mut step8_start: DateTime<Utc> = Utc::now();
+    let mut step8_end: DateTime<Utc> = Utc::now();
+    let mut step9_start: DateTime<Utc> = Utc::now();
+    let mut step9_end: DateTime<Utc> = Utc::now();
+    let mut step10_start: DateTime<Utc> = Utc::now();
+    let mut step10_end: DateTime<Utc> = Utc::now();
+
+
+    let response = match cache_data.clone() {
         Some(data) => {
-            log::info!("Data Found in cache");
-
-            // cache.timer_reset(&service).await;
-            HttpResponse::Ok()
+            info!("Data Found in cache");
+    
+            // Step 4: Prepare cached response
+            step4_start = step3_end;
+            let response = HttpResponse::Ok()
                 .append_header((
                     "X-Cache-Remaining-Time",
                     cache.timer_get().await.to_string(),
                 ))
-                .body(data)
+                .body(data);
+            step4_end = Utc::now();
+    
+            response
         }
         None => {
-            log::info!("Data not found in cache");
+            info!("Data not found in cache");
 
-            if let Some(id) = &param.id {
-                let record: Option<AnimeRecord> = match service.surreal.select(("anime", id)).await
-                {
+
+            // Step 5: Retrieve data from database
+            step5_start = step3_end;
+            let response = if let Some(id) = &param.id {
+                let record: Option<AnimeRecord> = match service.surreal.select(("anime", id)).await {
                     Ok(data) => Some(data.unwrap()),
                     Err(_) => None,
                 };
-
+                step5_end = Utc::now();
+    
+                // Step 6: Serialize data and update cache
+                step6_start = step5_end;
                 let res: String = match &record {
                     Some(data) => {
                         let res = serde_json::to_string(&data)
@@ -121,30 +163,75 @@ pub async fn handler_anime_get(
                     }
                     None => String::from("No data Found"),
                 };
-
-                return match &record {
+                step6_end = Utc::now();
+    
+                // Step 7: Prepare response
+                step7_start = step6_end;
+                let response = match &record {
                     Some(_) => HttpResponse::Ok().body(res),
                     None => HttpResponse::NotFound().body(res),
                 };
+                step7_end = Utc::now();
+    
+                response
             } else {
+                // Step 8: Query all records
+                step8_start = step5_start;
                 let record: Vec<AnimeRecord> =
                     match service.surreal.query("SELECT * FROM anime").await {
                         Ok(mut data) => data.take(0).unwrap(),
                         Err(_) => Vec::new(),
                     };
-
+                step8_end = Utc::now();
+    
+                // Step 9: Serialize data and update cache
+                step9_start = step8_end;
                 let res = serde_json::to_string(&record)
                     .unwrap_or_else(|_| panic!("Failed to format the data"));
-
-                if String::from(&res) != "[]" {
+                if res != "[]" {
                     cache.set(&res).await;
-                    return HttpResponse::Ok().body(res);
+                    step9_end = Utc::now();
+    
+                    // Step 10: Prepare response
+                    step10_start = step9_end;
+                    let response = HttpResponse::Ok().body(res);
+                    step10_end = Utc::now();
+    
+                    response
                 } else {
-                    return HttpResponse::NotFound().body(res);
+                    step10_start = step9_start;
+                    let response = HttpResponse::NotFound().body(res);
+                    step10_end = step10_start;
+    
+                    response
                 }
             };
+            response
         }
+    };
+
+    // Capture the end time and calculate the total duration
+    let end_time = Utc::now();
+
+    // Log durations
+    info!("Step 1 (Parse query string): {} ms", (step1_end - step1_start).num_milliseconds());
+    info!("Step 2 (Create cache object): {} ms", (step2_end - step2_start).num_milliseconds());
+    info!("Step 3 (Check cache): {} ms", (step3_end - step3_start).num_milliseconds());
+    if let Some(_) = cache_data {
+        info!("Step 4 (Prepare cached response): {} ms", (step4_end - step4_start).num_milliseconds());
     }
+    if let None = cache_data {
+        info!("Step 5 (Retrieve data from database): {} ms", (step5_end - step5_start).num_milliseconds());
+        info!("Step 6 (Serialize data and update cache): {} ms", (step6_end - step6_start).num_milliseconds());
+        info!("Step 7 (Prepare response): {} ms", (step7_end - step7_start).num_milliseconds());
+        info!("Step 8 (Query all records): {} ms", (step8_end - step8_start).num_milliseconds());
+        info!("Step 9 (Serialize data and update cache): {} ms", (step9_end - step9_start).num_milliseconds());
+        info!("Step 10 (Prepare response): {} ms", (step10_end - step10_start).num_milliseconds());
+    }
+    info!("Total request processing time: {} ms", (end_time - start_time).num_milliseconds());
+
+
+    response
 }
 
 pub async fn handler_anime_post(

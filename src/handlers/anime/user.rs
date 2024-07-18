@@ -14,8 +14,8 @@ trait UserAnimeField {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserAnime {
-    watched: u8,
-    score: u8,
+    watched: i64,
+    score: f64,
     status: String,
 }
 
@@ -58,7 +58,7 @@ struct FormData {
     id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct FormDataCreated {
     uid: String,
     aid: String,
@@ -73,7 +73,7 @@ pub async fn handler_user_anime_get(
         .unwrap_or_else(|_| panic!("Failed at query from params"));
 
     let record: Option<UserAnimeRecord> =
-        match service.surreal.select(("user_anime", &param.id)).await {
+        match service.surreal.select(("has_anime", &param.id)).await {
             Ok(data) => data,
             Err(e) => panic!("{}", e),
         };
@@ -99,10 +99,13 @@ pub async fn handler_user_anime_post(
     let param = Query::<FormDataCreated>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("failed at query from params"));
 
+    log::info!("Params: {:?}", param.clone());
+    log::info!("Request: {:?}", req);
+
     let record: Option<UserAnimeRecord> = match service
         .surreal
         .query(
-            "RELATE $user_id->user_anime->$anime_id SET 
+            "RELATE $user_id->has_anime->$anime_id SET 
             watched = $watched, 
             score = $score, 
             status = $status, 
@@ -149,7 +152,7 @@ pub async fn handler_user_anime_patch(
 
     let record: Option<UserAnimeRecord> = match service
         .surreal
-        .update(("user_anime", &param.id))
+        .update(("has_anime", &param.id))
         .merge(UserAnimeUpdate {
             base: req.base(),
             updated_at: Datetime::default(),
@@ -181,7 +184,7 @@ pub async fn handler_user_anime_delete(
         .unwrap_or_else(|_| panic!("Failed to query from Params"));
 
     let record: Option<UserAnimeRecord> =
-        match service.surreal.delete(("user_anime", &param.id)).await {
+        match service.surreal.delete(("has_anime", &param.id)).await {
             Ok(data) => data,
             Err(_) => None,
         };
