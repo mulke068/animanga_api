@@ -11,7 +11,7 @@ pub mod tests;
 ///
 /// use crate::AppServices;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct AppServices {
     pub surreal: surrealdb::Surreal<surrealdb::engine::remote::ws::Client>,
