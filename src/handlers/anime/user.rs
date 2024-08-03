@@ -8,15 +8,15 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::{Datetime, Id, Thing};
 // ---------------------- Structs -------------------
 
-trait UserAnimeField {
-    fn base(&self) -> UserAnime;
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserAnime {
     watched: i64,
     score: f64,
     status: String,
+}
+
+trait UserAnimeField {
+    fn base(&self) -> UserAnime;
 }
 
 impl UserAnimeField for UserAnime {
@@ -31,6 +31,58 @@ struct UserAnimeCreate {
     anime_id: Thing,
     #[serde(flatten)]
     base: UserAnime,
+    updated_at: Datetime,
+    created_at: Datetime,
+}
+
+trait UserAnimeActions {
+    fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeCreate;
+    async fn create_to_db(&self, service: web::Data<AppServices>) -> Result<String, String>;
+}
+
+impl UserAnimeActions for UserAnimeCreate {
+    fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeCreate {
+        UserAnimeCreate {
+            user_id: Thing {
+                tb: String::from("user"),
+                id: Id::String(user_id.clone()),
+            },
+            anime_id: Thing {
+                tb: String::from("anime"),
+                id: Id::String(anime_id.clone()),
+            },
+            base,
+            updated_at: Datetime::default(),
+            created_at: Datetime::default(),
+        }
+    }
+    async fn create_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
+        let query_results: Result<Option<UserAnimeRecord>, surrealdb::Error> = match service
+            .surreal
+            .query(
+                "
+            RELATE $user_id->has_anime->$anime_id SET
+            watched = $watched,
+            score = $score,
+            status = $status,
+            updated_at = $updated_at,
+            created_at = $created_at;",
+            )
+            .bind(self)
+            .await
+        {
+            Ok(mut data) => data.take(0),
+            Err(e) => panic!("{}", e),
+        };
+
+        match query_results {
+            Ok(Some(data)) => {
+                serde_json::to_string(&data).map_err(|_| "Failed to Serialize Data".to_string())
+            }
+            Ok(None) => Err(format!("Failed to Create Record")),
+            Err(e) => Err(format!("Database Error: {}", e)),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -99,46 +151,16 @@ pub async fn handler_user_anime_post(
     let param = Query::<FormDataCreated>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("failed at query from params"));
 
-    log::info!("Params: {:?}", param.clone());
-    log::info!("Request: {:?}", req);
+    // log::info!("Params: {:?}", param.clone());
+    // log::info!("Request: {:?}", req);
 
-    let record: Option<UserAnimeRecord> = match service
-        .surreal
-        .query(
-            "RELATE $user_id->has_anime->$anime_id SET 
-            watched = $watched, 
-            score = $score, 
-            status = $status, 
-            updated_at = time::now(), 
-            created_at = time::now();",
-        )
-        .bind(UserAnimeCreate {
-            user_id: Thing {
-                tb: String::from("user"),
-                id: Id::String(param.uid.clone()),
-            },
-            anime_id: Thing {
-                tb: String::from("anime"),
-                id: Id::String(param.aid.clone()),
-            },
-            base: req.base(),
-        })
-        .await
-    {
-        Ok(mut data) => data.take(0).unwrap(),
-        Err(e) => panic!("{}", e),
-    };
+    let res = UserAnimeCreate::new(&param.uid, &param.aid, req.base())
+        .create_to_db(service)
+        .await;
 
-    let res: String = match &record {
-        Some(data) => {
-            serde_json::to_string(&data).unwrap_or_else(|_| panic!("Failed at Serialize data"))
-        }
-        None => String::from("Failed to Create"),
-    };
-
-    match &record {
-        Some(_) => HttpResponse::Created().body(res),
-        None => HttpResponse::NotAcceptable().body(res),
+    match res {
+        Ok(data) => HttpResponse::Created().body(data),
+        Err(e) => HttpResponse::NotAcceptable().body(e),
     }
 }
 

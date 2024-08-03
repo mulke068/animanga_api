@@ -2,6 +2,7 @@ target
 .vscode
 .env
 .debug
+.vs
 
 *.lock
 *.log

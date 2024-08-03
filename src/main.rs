@@ -219,6 +219,7 @@ async fn main() -> std::io::Result<()> {
             )
             .route("/", web::get().to(main_page))
     })
+    .workers(1)
     .bind((
         app_url.as_str(),
         app_port.to_string().parse::<u16>().unwrap(),
