@@ -1,9 +1,7 @@
-
-
-use actix::{Actor, StreamHandler};
-use actix_web::{web, Error, HttpRequest, HttpResponse, Result};
+use actix::{ Actor, StreamHandler };
+use actix_web::{ web, Error, HttpRequest, HttpResponse, Result };
 use actix_web_actors::ws;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 use crate::AppServices;
 
@@ -20,7 +18,6 @@ struct SendMessageHandler {
     payload: PayloadHandler,
 }
 
-
 #[derive(Debug, Deserialize, Serialize)]
 struct RecieveMessageHandler {
     target: String,
@@ -36,8 +33,6 @@ impl Actor for MyWs {
     type Context = ws::WebsocketContext<Self>;
 }
 
-
-
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
@@ -48,13 +43,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
 
                 let deserialized: RecieveMessageHandler = serde_json::from_str(&msg).unwrap();
                 let target: Vec<&str> = deserialized.target.split(':').collect();
-                
 
                 match target[0] {
                     "has_anime" => {
                         match target[1] {
                             "watched" => {
                                 
+
                                 ctx.text("Test 1");
                             }
                             "count" => {
@@ -65,20 +60,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
                             }
                         }
                     }
-                    _ => {
-                        ctx.text(msg)
-                    }
+                    _ => { ctx.text(msg) }
                 }
 
-
                 // log::info!("text: {:?}", slplitted);
-
-            },
+            }
             Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
             }
-            _ => ()
+            _ => (),
         }
     }
 }
@@ -88,4 +79,4 @@ pub async fn handler_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpRe
     let res = ws::start(MyWs { services: buff_service.clone() }, &req, stream);
     // log::info!(target: "ws::start" , "result: {:?}", res);
     res
-} 
+}

@@ -1,32 +1,32 @@
+
 use crate::AppServices;
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
     HttpRequest, HttpResponse, Responder,
 };
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::{Datetime, Id, Thing};
 // ---------------------- Structs -------------------
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserAnime {
     watched: i64,
     score: f64,
     status: String,
 }
 
-trait UserAnimeField {
-    fn base(&self) -> UserAnime;
-}
-
-impl UserAnimeField for UserAnime {
-    fn base(&self) -> UserAnime {
-        self.clone()
-    }
+#[async_trait]
+pub trait UserAnimeActions {
+    fn new(user_id: &String, anime_id: &String, base: UserAnime) -> Self
+    where
+        Self: Sized;
+    async fn store_to_db(&self, service: web::Data<AppServices>) -> Result<String, String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct UserAnimeCreate {
+pub struct UserAnimeCreate {
     user_id: Thing,
     anime_id: Thing,
     #[serde(flatten)]
@@ -35,11 +35,7 @@ struct UserAnimeCreate {
     created_at: Datetime,
 }
 
-trait UserAnimeActions {
-    fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeCreate;
-    async fn create_to_db(&self, service: web::Data<AppServices>) -> Result<String, String>;
-}
-
+#[async_trait]
 impl UserAnimeActions for UserAnimeCreate {
     fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeCreate {
         UserAnimeCreate {
@@ -56,7 +52,8 @@ impl UserAnimeActions for UserAnimeCreate {
             created_at: Datetime::default(),
         }
     }
-    async fn create_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
+
+    async fn store_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
         let query_results: Result<Option<UserAnimeRecord>, surrealdb::Error> = match service
             .surreal
             .query(
@@ -87,9 +84,48 @@ impl UserAnimeActions for UserAnimeCreate {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct UserAnimeUpdate {
+    user_id: Thing,
+    anime_id: Thing,
     #[serde(flatten)]
     base: UserAnime,
     updated_at: Datetime,
+}
+
+#[async_trait]
+impl UserAnimeActions for UserAnimeUpdate {
+    fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeUpdate {
+        UserAnimeUpdate {
+            user_id: Thing {
+                tb: String::from("user"),
+                id: Id::String(user_id.clone()),
+            },
+            anime_id: Thing {
+                tb: String::from("anime"),
+                id: Id::String(anime_id.clone()),
+            },
+            base,
+            updated_at: Datetime::default(),
+        }
+    }
+
+    async fn store_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
+        let query_results: Result<Option<UserAnimeRecord>, surrealdb::Error> = match service
+            .surreal
+            .query(
+                "UPDATE (SELECT id FROM has_anime WHERE in = $user_id AND out = $anime_id) SET score = $score, watched = $watched status = $status, updated_at = $updated_at;",
+            ).bind(self).await {
+                Ok(mut data) => data.take(0),
+                Err(e) => panic!("{}", e),
+            };
+
+        match query_results {
+            Ok(Some(data)) => {
+                serde_json::to_string(&data).map_err(|_| "Failed to Serialize Data".to_string())
+            }
+            Ok(None) => Err(format!("Failed to Update Record")),
+            Err(e) => Err(format!("Database Error: {}", e)),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,13 +141,14 @@ struct UserAnimeRecord {
     created_at: Datetime,
 }
 
-#[derive(Deserialize)]
+
+#[derive(Debug, Deserialize, Clone)]
 struct FormData {
     id: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct FormDataCreated {
+struct FormDataFull {
     uid: String,
     aid: String,
 }
@@ -148,14 +185,14 @@ pub async fn handler_user_anime_post(
     req: web::Json<UserAnime>,
     service: web::Data<AppServices>,
 ) -> impl Responder {
-    let param = Query::<FormDataCreated>::from_query(&params.query_string())
+    let param = Query::<FormDataFull>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("failed at query from params"));
 
     // log::info!("Params: {:?}", param.clone());
     // log::info!("Request: {:?}", req);
 
-    let res = UserAnimeCreate::new(&param.uid, &param.aid, req.base())
-        .create_to_db(service)
+    let res = UserAnimeCreate::new(&param.uid, &param.aid, req.into_inner())
+        .store_to_db(service)
         .await;
 
     match res {
@@ -169,32 +206,16 @@ pub async fn handler_user_anime_patch(
     req: web::Json<UserAnime>,
     service: web::Data<AppServices>,
 ) -> impl Responder {
-    let param = Query::<FormData>::from_query(&params.query_string())
+    let param = Query::<FormDataFull>::from_query(&params.query_string())
         .unwrap_or_else(|_| panic!("Failed at query from params"));
 
-    let record: Option<UserAnimeRecord> = match service
-        .surreal
-        .update(("has_anime", &param.id))
-        .merge(UserAnimeUpdate {
-            base: req.base(),
-            updated_at: Datetime::default(),
-        })
-        .await
-    {
-        Ok(data) => data,
-        Err(_) => None,
-    };
+    let res = UserAnimeUpdate::new(&param.uid, &param.aid, req.into_inner())
+        .store_to_db(service)
+        .await;
 
-    let res: String = match &record {
-        Some(data) => {
-            serde_json::to_string(&data).unwrap_or_else(|_| panic!("Failed to Serialize data"))
-        }
-        None => String::from("Failed to Update"),
-    };
-
-    match &record {
-        Some(_) => HttpResponse::Created().body(res),
-        None => HttpResponse::NotAcceptable().body(res),
+    match res {
+        Ok(data) => HttpResponse::Ok().body(data),
+        Err(e) => HttpResponse::NotAcceptable().body(e),
     }
 }
 
