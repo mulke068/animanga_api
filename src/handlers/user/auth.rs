@@ -58,8 +58,8 @@ impl AccountField for Account {
         let record: Option<UsersRecord> = service
             .surreal
             .query(query)
-            .bind(("user", &username))
-            .bind(("pass", &password))
+            .bind(("user", username))
+            .bind(("pass", password))
             .await
             .unwrap()
             .take(0)
@@ -114,15 +114,12 @@ async fn create_token(uid: &str, service: web::Data<AppServices>) -> String {
         .create("token")
         .content(Token {
             token,
-            out: Thing {
-                tb: ("user".to_string()),
-                id: (uid.into()),
-            },
+            out: Thing::from(("user", uid)),
             created_at: Datetime::default(),
         })
         .await
     {
-        Ok(data) => data,
+        Ok(data) => data.unwrap_or(Vec::new()),
         Err(_e) => {
             // log::error!("Error At Surrealdb: {:?}", e);
             Vec::new()

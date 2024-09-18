@@ -5,7 +5,7 @@ use actix_web::{
     HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::{Datetime, Id, Thing};
+use surrealdb::sql::{Datetime, Thing};
 // ---------------------- Structs -------------------
 
 trait UserMangaField {
@@ -111,14 +111,8 @@ pub async fn handler_user_manga_post(
             created_at = time::now();",
         )
         .bind(UserMangaCreate {
-            user_id: Thing {
-                tb: String::from("user"),
-                id: Id::String(param.uid.clone()),
-            },
-            manga_id: Thing {
-                tb: String::from("manga"),
-                id: Id::String(param.mid.clone()),
-            },
+            user_id: Thing::from(("user", param.uid.as_str())),
+            manga_id: Thing::from(("manga", param.mid.as_str())),
             base: req.base(),
         })
         .await

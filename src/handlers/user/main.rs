@@ -39,14 +39,17 @@ pub async fn handler_user_get(params: HttpRequest, service: web::Data<AppService
     }
 }
 
-pub async fn handler_user_post(mut req: web::Json<Users>, service: web::Data<AppServices>) -> impl Responder {
+pub async fn handler_user_post(req: web::Json<Users>, service: web::Data<AppServices>) -> impl Responder {
+
+    let content = req.clone();
+
     let record: Vec<UsersRecord> = match service
         .surreal
         .create("user")
-        .content(&req.create())
+        .content(content)
         .await
     {
-        Ok(record) => record,
+        Ok(record) => record.unwrap_or(Vec::new()),
         Err(_) => Vec::new(),
     };
 

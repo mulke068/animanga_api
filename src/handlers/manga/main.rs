@@ -149,7 +149,7 @@ pub async fn handler_manga_post(
         })
         .await
     {
-        Ok(data) => data,
+        Ok(data) => data.unwrap_or(Vec::new()),
         Err(_) => Vec::new(),
     };
 

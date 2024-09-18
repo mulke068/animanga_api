@@ -1,6 +1,6 @@
 use crate::handlers::user::{main::*, user_structs::UsersRecord};
-use actix_web::{test, web, App};
-use reqwest::StatusCode;
+use actix_web::{test, web, App, http::StatusCode};
+
 use serde_json::json;
 
 #[actix_web::test]

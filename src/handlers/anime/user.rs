@@ -1,4 +1,3 @@
-
 use crate::AppServices;
 // ---------------------- Imports -------------------
 use actix_web::{
@@ -7,7 +6,7 @@ use actix_web::{
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::{Datetime, Id, Thing};
+use surrealdb::sql::{Datetime, Thing};
 // ---------------------- Structs -------------------
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,14 +38,8 @@ pub struct UserAnimeCreate {
 impl UserAnimeActions for UserAnimeCreate {
     fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeCreate {
         UserAnimeCreate {
-            user_id: Thing {
-                tb: String::from("user"),
-                id: Id::String(user_id.clone()),
-            },
-            anime_id: Thing {
-                tb: String::from("anime"),
-                id: Id::String(anime_id.clone()),
-            },
+            user_id: Thing::from(("user", user_id.as_str())),
+            anime_id: Thing::from(("anime", anime_id.as_str())),
             base,
             updated_at: Datetime::default(),
             created_at: Datetime::default(),
@@ -54,6 +47,14 @@ impl UserAnimeActions for UserAnimeCreate {
     }
 
     async fn store_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
+        let user_id = self.user_id.clone();
+        let anime_id = self.anime_id.clone();
+        let watched = self.base.watched;
+        let score = self.base.score;
+        let status = self.base.status.clone();
+        let updated_at = self.updated_at.clone();
+        let created_at = self.created_at.clone();
+
         let query_results: Result<Option<UserAnimeRecord>, surrealdb::Error> = match service
             .surreal
             .query(
@@ -65,7 +66,22 @@ impl UserAnimeActions for UserAnimeCreate {
             updated_at = $updated_at,
             created_at = $created_at;",
             )
-            .bind(self)
+            .bind((
+                "user_id",
+                user_id,
+                "anime_id",
+                anime_id,
+                "watched",
+                watched,
+                "score",
+                score,
+                "status",
+                status,
+                "updated_at",
+                updated_at,
+                "created_at",
+                created_at,
+            ))
             .await
         {
             Ok(mut data) => data.take(0),
@@ -95,25 +111,34 @@ struct UserAnimeUpdate {
 impl UserAnimeActions for UserAnimeUpdate {
     fn new(user_id: &String, anime_id: &String, base: UserAnime) -> UserAnimeUpdate {
         UserAnimeUpdate {
-            user_id: Thing {
-                tb: String::from("user"),
-                id: Id::String(user_id.clone()),
-            },
-            anime_id: Thing {
-                tb: String::from("anime"),
-                id: Id::String(anime_id.clone()),
-            },
+            user_id: Thing::from(("user", user_id.as_str())),
+            anime_id: Thing::from(("anime", anime_id.as_str())),
             base,
             updated_at: Datetime::default(),
         }
     }
 
     async fn store_to_db(&self, service: web::Data<AppServices>) -> Result<String, String> {
+        let user_id = self.user_id.clone();
+        let anime_id = self.anime_id.clone();
+        let watched = self.base.watched;
+        let score = self.base.score;
+        let status = self.base.status.clone();
+        let updated_at = self.updated_at.clone();
+
         let query_results: Result<Option<UserAnimeRecord>, surrealdb::Error> = match service
             .surreal
             .query(
                 "UPDATE (SELECT id FROM has_anime WHERE in = $user_id AND out = $anime_id) SET score = $score, watched = $watched status = $status, updated_at = $updated_at;",
-            ).bind(self).await {
+            ).bind((
+                "user_id",user_id,
+                "anime_id",anime_id,
+                "watched",watched,
+                "score",score,
+                "status",status,
+                "updated_at",updated_at,
+            ))
+            .await {
                 Ok(mut data) => data.take(0),
                 Err(e) => panic!("{}", e),
             };
@@ -140,7 +165,6 @@ struct UserAnimeRecord {
     updated_at: Datetime,
     created_at: Datetime,
 }
-
 
 #[derive(Debug, Deserialize, Clone)]
 struct FormData {

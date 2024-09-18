@@ -179,7 +179,7 @@ async fn main() -> std::io::Result<()> {
             )
             .route(
                 "/anime/import",
-                web::post().to(api::handlers::anime::import::post),
+                web::post().to(api::handlers::anime::main::handler_anime_multi_post),
             )
             .service(
                 web::resource("/anime/search")
