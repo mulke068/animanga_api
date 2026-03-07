@@ -1,78 +1,16 @@
 use crate::{middleware::caching::Caching, AppServices};
+use super::model::{
+    Anime, AnimeCreate, AnimeRecord, AnimeUpdate, AnimeField
+};
+use surrealdb::sql::Datetime;
 // ---------------------- Imports -------------------
 use actix_web::{
     web::{self, Query},
     HttpRequest, HttpResponse, Responder,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 
-use surrealdb::sql::{Datetime, Thing};
 // ---------------------- Structs -------------------
-
-pub trait AnimeField {
-    fn base(&self) -> Anime;
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct AnimeNames {
-    pub original: String,
-    pub en: Option<String>,
-    pub jp: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Anime {
-    pub names: AnimeNames,
-
-    pub season: i64,
-    pub episodes: i64,
-    pub score: f64,
-    pub status: String,
-
-    pub types: Vec<String>,
-    pub platforms: Vec<String>,
-    pub genres: Vec<String>,
-    pub tags: Vec<String>,
-
-    pub trailer_urls: Vec<String>,
-    pub info_urls: Vec<String>,
-    pub video_urls: Vec<String>,
-    pub image_urls: Vec<String>,
-}
-
-impl AnimeField for Anime {
-    fn base(&self) -> Anime {
-        self.clone()
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AnimeCreate {
-    #[serde(flatten)]
-    pub base: Anime,
-
-    pub updated_at: Datetime,
-    pub created_at: Datetime,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct AnimeUpdate {
-    #[serde(flatten)]
-    base: Anime,
-
-    updated_at: Datetime,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AnimeRecord {
-    id: Thing,
-
-    #[serde(flatten)]
-    base: Anime,
-
-    updated_at: Datetime,
-    created_at: Datetime,
-}
 
 #[derive(Deserialize)]
 struct FormData {

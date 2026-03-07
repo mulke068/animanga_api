@@ -8,7 +8,7 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
-use super::main::AnimeNames;
+use super::model::Names as AnimeNames;
 use crate::AppServices;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -53,7 +53,7 @@ pub async fn get(params: HttpRequest, service: web::Data<AppServices>) -> impl R
         let mut filtered_data: Vec<&AnimeSearch> = record
             .iter()
             .filter(|res| {
-                res.names.original.contains(&param.q)
+                res.names.original.as_ref().map_or(false, |orig| orig.contains(&param.q))
                     || res.names.en.as_ref().map(|en| en.contains(&param.q)).unwrap_or(false)
                     || res.names.jp.as_ref().map(|jp| jp.contains(&param.q)).unwrap_or(false)
             })

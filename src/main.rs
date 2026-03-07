@@ -24,11 +24,9 @@ async fn main() -> std::io::Result<()> {
     // std::env::set_var("RUST_BACKTRACE", "0");
     dotenv::dotenv().ok();
 
-    let surreal_url =
-        std::env::var("SURREAL_URL").unwrap_or_else(|_| String::from("127.0.0.1:8000"));
-    let redis_url =
-        std::env::var("REDIS_URL").unwrap_or_else(|_| String::from("redis://127.0.0.1"));
-    let app_url: String = std::env::var("API_URL").unwrap_or_else(|_| String::from("172.0.0.1"));
+    let surreal_url = std::env::var("SURREAL_URL").unwrap_or_else(|_| String::from("127.0.0.1:8000"));
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| String::from("redis://127.0.0.1"));
+    let app_url: String = std::env::var("API_URL").unwrap_or_else(|_| String::from("127.0.0.1"));
     let app_port: String = std::env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
 
     api::middleware::logger::setup_logger();
@@ -82,21 +80,21 @@ async fn main() -> std::io::Result<()> {
     }
 
     let client_redis: redis::Client = match redis::Client::open(redis_url) {
-        Ok(client) => {
-            info!("Open Connection to redis");
-            {
-                match client.get_connection() {
-                    Ok(_) => info!("Connected to redis"),
-                    Err(_) => error!("Failed to connect to redis"),
-                }
-            }
-            client
-        }
-        Err(_) => {
-            error!("Failed to open Connection to redis");
-            return Ok(());
-        }
-    };
+         Ok(client) => {
+             info!("Open Connection to redis");
+             {
+                 match client.get_connection() {
+                     Ok(_) => info!("Connected to redis"),
+                     Err(_) => error!("Failed to connect to redis"),
+                 }
+             }
+             client
+         }
+         Err(_) => {
+             error!("Failed to open Connection to redis");
+             return Ok(());
+         }
+     };
 
     //{
     //    let settings = settings::Settings {
@@ -222,7 +220,7 @@ async fn main() -> std::io::Result<()> {
     .workers(1)
     .bind((
         app_url.as_str(),
-        app_port.to_string().parse::<u16>().unwrap(),
+        app_port.to_string().parse::<u16>().unwrap()
     ))?
     // .bind(format!("[[::1]]:{app_port}"))?
     .run()

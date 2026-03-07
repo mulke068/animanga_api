@@ -5,7 +5,7 @@
 use actix_web::web;
 
 use crate::constructor::jikan::anime::Search as AnimeSearch;
-use crate::handlers::anime::main::{Anime, AnimeNames};
+use super::model::{Anime , Names as AnimeNames};
 use crate::middleware::caching::Caching;
 use crate::modules::error_handler::CustomError;
 use crate::AppServices;
@@ -95,7 +95,7 @@ fn convert_search_to_anime(search: &AnimeSearch) -> Vec<Anime> {
         .iter()
         .map(|data| {
             let names = AnimeNames {
-                original: data.title.clone().unwrap_or_default(),
+                original: Some(data.title.clone().unwrap_or_default()),
                 en: Some(data.title_english.clone().unwrap_or_default()),
                 jp: Some(data.title_japanese.clone().unwrap_or_default()),
             };
@@ -138,9 +138,9 @@ fn convert_search_to_anime(search: &AnimeSearch) -> Vec<Anime> {
             // }
             platforms.push(format!("{:?}", &data.source));
 
-            let genres = data.genres.iter().map(|genre| genre.name.clone()).collect();
+            let genres = data.genres.iter().map(|genre| genre.name.clone()).collect::<Vec<String>>();
 
-            let tags = data
+            let tags: Vec<String> = data
                 .themes
                 .iter()
                 .map(|genres| genres.name.clone())
@@ -162,26 +162,29 @@ fn convert_search_to_anime(search: &AnimeSearch) -> Vec<Anime> {
             //     .map(|url| vec![url.clone()])
             //     .unwrap_or_default();
 
-            let image_urls = data
+            let image_urls: Vec<String> = data
                 .images
                 .values()
                 .map(|image| image.image_url.clone())
                 .collect();
 
             Anime {
-                names,
-                season: 0,
-                episodes: data.episodes.unwrap_or_default(),
-                score: data.score.unwrap_or_default(),
-                status,
-                types,
-                platforms,
-                genres,
-                tags,
-                trailer_urls,
-                info_urls,
-                video_urls: vec![],
-                image_urls,
+                names: Some(names),
+                season: Some(0),
+                episodes: data.episodes.map(|e| e as u32),
+                score: data.score.map(|s| s as f32),
+                status: Some(status),
+                types: Some(types),
+                platforms: Some(platforms),
+                genres: Some(genres),
+                tags: Some(tags),
+                trailer_urls: Some(trailer_urls),
+                info_urls: Some(info_urls),
+                video_urls: Some(vec![]),
+                image_urls: None, // You need to convert Vec<String> to Option<Vec<ImageUrl>> if possible
+                description: Some(data.synopsis.clone().unwrap_or_default()),
+                related: Some(vec![]),
+                visible: Some(true),
             }
         })
         .collect()
